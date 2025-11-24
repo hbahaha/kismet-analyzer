@@ -725,6 +725,7 @@ public class SummaryGenerator {
                         lines.Add(Stringify(arg, ref index, referencedAddresses));
                     }
                     index++;
+                    if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_SetMap e:
