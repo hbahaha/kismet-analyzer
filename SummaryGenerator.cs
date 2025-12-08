@@ -394,7 +394,7 @@ public class SummaryGenerator {
                 {
                     lines = new Lines("EX_" + e.Inst + " " + ToString(e.ClassPtr));
                     index += 8;
-                    lines.Add(Stringify(e.TargetExpression, ref index, referencedAddresses));
+                    lines.Add(Stringify(e.Target, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
@@ -402,7 +402,7 @@ public class SummaryGenerator {
                 {
                     lines = new Lines("EX_" + e.Inst + " " + ToString(e.ClassPtr));
                     index += 8;
-                    lines.Add(Stringify(e.TargetExpression, ref index, referencedAddresses));
+                    lines.Add(Stringify(e.Target, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
@@ -529,6 +529,13 @@ public class SummaryGenerator {
                 {
                     lines = new Lines(String.Format("EX_{0} {1},{2},{3}", e.Inst, e.Value.X, e.Value.Y, e.Value.Z));
                     index += Asset.ObjectVersionUE5 >= ObjectVersionUE5.LARGE_WORLD_COORDINATES ? 24U : 12U;
+                    if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
+                    break;
+                }
+            case EX_Vector3fConst e:
+                {
+                    lines = new Lines(String.Format("EX_{0} {1},{2},{3}", e.Inst, e.X, e.Y, e.Z));
+                    index += 12;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
@@ -768,6 +775,13 @@ public class SummaryGenerator {
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
+            case EX_BitFieldConst e:
+                {
+                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.Property) + " " + e.Value);
+                    index += 8 + 1;
+                    if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
+                    break;
+                }
             case EX_ByteConst e:
                 {
                     lines = new Lines("EX_" + e.Inst + " " + e.Value);
@@ -776,6 +790,13 @@ public class SummaryGenerator {
                     break;
                 }
             case EX_IntConst e:
+                {
+                    lines = new Lines("EX_" + e.Inst + " " + e.Value);
+                    index += 4;
+                    if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
+                    break;
+                }
+            case EX_NothingInt32 e:
                 {
                     lines = new Lines("EX_" + e.Inst + " " + e.Value);
                     index += 4;

@@ -72,7 +72,7 @@ public class Kismet {
                 break;
             case EX_DynamicCast e:
                 offset += 8;
-                Walk(asset, ref offset, e.TargetExpression, func);
+                Walk(asset, ref offset, e.Target, func);
                 break;
             case EX_FinalFunction e: // +EX_LocalFinalFunction
                 offset += 8;
@@ -130,7 +130,7 @@ public class Kismet {
                 break;
             case EX_MetaCast e:
                 offset += 8;
-                Walk(asset, ref offset, e.TargetExpression, func);
+                Walk(asset, ref offset, e.Target, func);
                 break;
             case EX_ObjToInterfaceCast e:
                 offset += 8;
@@ -239,8 +239,8 @@ public class Kismet {
             EX_LetWeakObjPtr e => GetSize(asset, e.VariableExpression) + GetSize(asset, e.AssignmentExpression),
             EX_LetValueOnPersistentFrame e => 8 + GetSize(asset, e.AssignmentExpression),
             EX_StructMemberContext e => 8 + GetSize(asset, e.StructExpression),
-            EX_MetaCast e => 8 + GetSize(asset, e.TargetExpression),
-            EX_DynamicCast e => 8 + GetSize(asset, e.TargetExpression),
+            EX_MetaCast e => 8 + GetSize(asset, e.Target),
+            EX_DynamicCast e => 8 + GetSize(asset, e.Target),
             EX_PrimitiveCast e => 1 + e.ConversionType switch { ECastToken.ObjectToInterface => 8U, /* TODO InterfaceClass */ _ => 0U} + GetSize(asset, e.Target),
             EX_PopExecutionFlow e => 0,
             EX_PopExecutionFlowIfNot e => GetSize(asset, e.BooleanExpression),
@@ -259,6 +259,7 @@ public class Kismet {
                 },
             EX_ObjectConst e => 8,
             EX_VectorConst e => asset.ObjectVersionUE5 >= ObjectVersionUE5.LARGE_WORLD_COORDINATES ? 24U : 12U,
+            EX_Vector3fConst e => 12,
             EX_RotationConst e => asset.ObjectVersionUE5 >= ObjectVersionUE5.LARGE_WORLD_COORDINATES ? 24U : 12U,
             EX_TransformConst e => asset.ObjectVersionUE5 >= ObjectVersionUE5.LARGE_WORLD_COORDINATES ? 80U : 40U,
             EX_Context e => + GetSize(asset, e.ObjectExpression) + 4 + 8 + GetSize(asset, e.ContextExpression),
@@ -277,8 +278,10 @@ public class Kismet {
             EX_SetMap e => GetSize(asset, e.MapProperty) + 4 + e.Elements.Select(p => GetSize(asset, p)).Aggregate(0U, (acc, x) => x + acc) + 1,
             EX_SetSet e => GetSize(asset, e.SetProperty) + 4 + e.Elements.Select(p => GetSize(asset, p)).Aggregate(0U, (acc, x) => x + acc) + 1,
             EX_SoftObjectConst e => GetSize(asset, e.Value),
+            EX_BitFieldConst e => 8 + 1,
             EX_ByteConst e => 1,
             EX_IntConst e => 4,
+            EX_NothingInt32 e => 4,
             EX_FloatConst e => 4,
             EX_Int64Const e => 8,
             EX_UInt64Const e => 8,
@@ -725,6 +728,13 @@ public class Kismet {
                         Value = e.Value,
                     };
                 }
+            case EX_BitFieldConst e:
+                {
+                    return new EX_BitFieldConst() {
+                        Property = CopyKismetPropertyPointer(e.Property, src, dst, fnSrc, fnDst),
+                        Value = e.Value,
+                    };
+                }
             case EX_ByteConst e:
                 {
                     return new EX_ByteConst() {
@@ -734,6 +744,12 @@ public class Kismet {
             case EX_IntConst e:
                 {
                     return new EX_IntConst() {
+                        Value = e.Value,
+                    };
+                }
+            case EX_NothingInt32 e:
+                {
+                    return new EX_NothingInt32() {
                         Value = e.Value,
                     };
                 }
@@ -753,6 +769,14 @@ public class Kismet {
                 {
                     return new EX_VectorConst() {
                         Value = e.Value,
+                    };
+                }
+            case EX_Vector3fConst e:
+                {
+                    return new EX_Vector3fConst() {
+                        X = e.X,
+                        Y = e.Y,
+                        Z = e.Z,
                     };
                 }
             case EX_RotationConst e:
@@ -913,7 +937,7 @@ public class Kismet {
                 {
                     return new EX_DynamicCast() {
                         ClassPtr = CopyImportTo((src, e.ClassPtr), dst),
-                        TargetExpression = CopyExpressionTo(e.TargetExpression, src, dst, fnSrc, fnDst),
+                        Target = CopyExpressionTo(e.Target, src, dst, fnSrc, fnDst),
                     };
                 }
             case EX_PrimitiveCast e:
