@@ -191,9 +191,9 @@ Leading underscores can be used to work around special function names being ille
 
         p.WaitForExit();
 
-        var assembly = Assembly.GetAssembly(typeof(Program));
-        var resourceName = $"{assembly.GetName().Name.Replace("-", "_")}.viz.embed.html";
-        var template = new StreamReader(assembly.GetManifestResourceStream(resourceName)).ReadToEnd();
+        var assembly = Assembly.GetAssembly(typeof(Program))!;
+        var resourceName = $"{assembly.GetName().Name!.Replace("-", "_")}.viz.embed.html";
+        var template = new StreamReader(assembly.GetManifestResourceStream(resourceName)!).ReadToEnd();
         var html = template.Replace("[DATA]", Convert.ToBase64String(Encoding.UTF8.GetBytes(svgData)));
 
         using(StreamWriter writetext = new StreamWriter(outputPath)) {
@@ -260,12 +260,12 @@ Leading underscores can be used to work around special function names being ille
             if (classExport != null) {
                 var parent = classExport.SuperStruct.ToImport(asset);
 
-                var assetPackage = Path.Join("/Game", Path.GetRelativePath(Path.Join(assetInputDir, projectName, "Content"), Path.GetDirectoryName(assetPath)), Path.GetFileNameWithoutExtension(assetPath));
+                var assetPackage = Path.Join("/Game", Path.GetRelativePath(Path.Join(assetInputDir, projectName, "Content"), Path.GetDirectoryName(assetPath)!), Path.GetFileNameWithoutExtension(assetPath));
                 Console.WriteLine($"{assetPackage}.{classExport.ObjectName} : {parent.OuterIndex.ToImport(asset).ObjectName}.{parent.ObjectName}");
                 var fullClassName = $"{assetPackage}.{classExport.ObjectName}";
                 var fullParentName = $"{parent.OuterIndex.ToImport(asset).ObjectName}.{parent.ObjectName}";
 
-                string relativePath = Path.GetRelativePath(assetInputDir, Path.GetDirectoryName(assetPath));
+                string relativePath = Path.GetRelativePath(assetInputDir, Path.GetDirectoryName(assetPath)!);
                 string fileName = Path.ChangeExtension(Path.GetFileName(assetPath), ".html");
 
                 var classNode = new Node(fullClassName);
@@ -289,7 +289,7 @@ Leading underscores can be used to work around special function names being ille
                 p2.Bar.Refresh(i++, $"CFGs... ({Path.GetFileName(assetPath)})");
                 Console.SetOut(p2.NullOut);
             }
-            var outputDir = Path.GetDirectoryName(Path.Join(output, "cfgs", Path.GetRelativePath(assetInputDir, assetPath)));
+            var outputDir = Path.GetDirectoryName(Path.Join(output, "cfgs", Path.GetRelativePath(assetInputDir, assetPath)))!;
             var outputPath = Path.Join(outputDir, Path.ChangeExtension(Path.GetFileName(assetPath), ".html"));
             Directory.CreateDirectory(outputDir);
 
@@ -315,7 +315,7 @@ Leading underscores can be used to work around special function names being ille
 
             string jsonSerializedAsset = asset.SerializeJson(Newtonsoft.Json.Formatting.Indented);
             Console.WriteLine(outputPath);
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
             File.WriteAllText(outputPath, jsonSerializedAsset);
         }
     }
@@ -334,7 +334,7 @@ Leading underscores can be used to work around special function names being ille
         UAsset to = LoadAsset(ueVersion, mappings, assetDestination);
 
         foreach (var index in imports) {
-            var newIndex = Kismet.CopyImportTo((from, FPackageIndex.FromRawIndex(index)), to);
+            var newIndex = Kismet.CopyImportTo((from, FPackageIndex.FromRawIndex(index)), to)!;
             var i = newIndex.ToImport(to);
             Console.WriteLine($"Copied import {index} => {newIndex}: {i.ClassName}, {i.ClassPackage}, {i.ObjectName}");
         }
@@ -372,7 +372,7 @@ Leading underscores can be used to work around special function names being ille
                             var isReturn = inst.GetType() == typeof(EX_Return);
                             if (isReturn ? keepReturn : true) {
                                 offset += (int) Kismet.GetSize(source, inst);
-                                newInst.Add(Kismet.CopyExpressionTo(inst, source, dest, fnSrc, fnDest));
+                                newInst.Add(Kismet.CopyExpressionTo(inst, source, dest, fnSrc, fnDest)!);
                             }
                             if (isReturn) break;
                         }

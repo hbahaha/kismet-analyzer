@@ -132,6 +132,7 @@ public class SummaryGenerator {
 
         foreach (var export in Asset.Exports) {
             if (export is FunctionExport e) {
+                if (classExport == null) throw new InvalidOperationException("ClassExport found");
                 anyExport = true;
                 Output.WriteLine("FunctionExport " + e.ObjectName);
 
@@ -1006,6 +1007,6 @@ public class SummaryGenerator {
     }
 
     static string ToString(FName[] arr) {
-        return "[" + String.Join(",", (object[]?)arr) + "]";
+        return "[" + String.Join(",", (object[])arr) + "]";
     }
 }
