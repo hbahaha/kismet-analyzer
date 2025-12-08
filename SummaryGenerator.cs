@@ -925,8 +925,8 @@ public class SummaryGenerator {
             default:
                 {
                     throw new NotImplementedException($"DBG missing expression {exp}");
-                    lines = new Lines("DBG missing expression " + exp); // TODO better error handling
-                    break;
+                    // lines = new Lines("DBG missing expression " + exp); // TODO better error handling
+                    // break;
                 }
         }
         return lines;
