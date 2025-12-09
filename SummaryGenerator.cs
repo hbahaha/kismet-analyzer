@@ -10,63 +10,78 @@ using UAssetAPI.Kismet.Bytecode.Expressions;
 
 using Dot;
 
-public class SummaryGenerator {
-    public class Lines {
+public class SummaryGenerator
+{
+    public class Lines
+    {
         public string Label { get; }
         public List<Lines> Children { get; }
 
-        public Lines(string label) {
+        public Lines(string label)
+        {
             Label = label;
             Children = new List<Lines>();
         }
-        public Lines Add(Lines line) {
+        public Lines Add(Lines line)
+        {
             Children.Add(line);
             return this;
         }
-        public Lines Add(string line) {
+        public Lines Add(string line)
+        {
             Children.Add(new Lines(line));
             return this;
         }
-        public string ToString(int indent = 0) {
+        public string ToString(int indent = 0)
+        {
             var output = new StringWriter();
             output.WriteLine("".PadLeft(indent * 4) + Label);
-            foreach (var child in Children) {
+            foreach (var child in Children)
+            {
                 output.Write(child.ToString(indent + 1));
             }
             return output.ToString();
         }
-        public IEnumerable<(int, string)> GetLines() {
+        public IEnumerable<(int, string)> GetLines()
+        {
             yield return (0, Label);
-            foreach (var child in Children) {
-                foreach (var (nest, line) in child.GetLines()) {
+            foreach (var child in Children)
+            {
+                foreach (var (nest, line) in child.GetLines())
+                {
                     yield return (nest + 1, line);
                 }
             }
         }
     }
-    public class Instruction {
+    public class Instruction
+    {
         public uint Address { get; }
         public List<Reference> ReferencedAddresses { get; }
         public Lines Content { get; }
 
-        public Instruction(uint address, List<Reference> referencedAddresses, Lines content) {
+        public Instruction(uint address, List<Reference> referencedAddresses, Lines content)
+        {
             Address = address;
             ReferencedAddresses = referencedAddresses;
             Content = content;
         }
     }
-    public readonly struct Reference {
+    public readonly struct Reference
+    {
         public uint Address { get; }
         public ReferenceType Type { get; }
         public string? FunctionName { get; }
 
-        public Reference(uint address, ReferenceType type, string? functionName = null) {
+        public Reference(uint address, ReferenceType type, string? functionName = null)
+        {
             Address = address;
             Type = type;
             FunctionName = functionName;
         }
     }
-    public enum ReferenceType {
+    public enum ReferenceType
+    {
         Normal,
         Jump,
         JumpTrue,
@@ -81,7 +96,8 @@ public class SummaryGenerator {
     TextWriter DotOutput;
     Graph Graph;
 
-    public SummaryGenerator(UAsset asset, TextWriter output, TextWriter dotOutput) {
+    public SummaryGenerator(UAsset asset, TextWriter output, TextWriter dotOutput)
+    {
         Asset = asset;
         Output = output;
         DotOutput = dotOutput;
@@ -92,25 +108,30 @@ public class SummaryGenerator {
         Graph.EdgeAttributes["fontname"] = "monospace";
     }
 
-    public bool Summarize() {
+    public bool Summarize()
+    {
         var anyExport = false;
         var minRank = new Subgraph();
         minRank.Attributes["rank"] = "min";
         Graph.Subgraphs.Add(minRank);
 
         var classExport = Asset.GetClassExport();
-        if (classExport != null) {
+        if (classExport != null)
+        {
             anyExport = true;
             var classLines = new Lines($"ClassExport: {classExport.ObjectName}");
             classLines.Add(new Lines($"SuperStruct: {ToString(classExport.SuperStruct)}"));
             var propLines = new Lines("Properties:");
 
-            foreach (var prop in classExport.LoadedProperties) {
+            foreach (var prop in classExport.LoadedProperties)
+            {
                 var lines = new Lines($"{prop.SerializedType.ToString()} {prop.Name.ToString()}");
 
                 var flags = new List<string>();
-                foreach (EPropertyFlags flag in Enum.GetValues(typeof(EPropertyFlags))) {
-                    if (flag != EPropertyFlags.CPF_None && prop.PropertyFlags.HasFlag(flag)) {
+                foreach (EPropertyFlags flag in Enum.GetValues(typeof(EPropertyFlags)))
+                {
+                    if (flag != EPropertyFlags.CPF_None && prop.PropertyFlags.HasFlag(flag))
+                    {
                         flags.Add(flag.ToString());
                     }
                 }
@@ -126,12 +147,16 @@ public class SummaryGenerator {
             classNode.Attributes["fillcolor"] = "#88ff88";
             Graph.Nodes.Add(classNode);
             minRank.Nodes.Add(new Node(classNode.Id));
-        } else {
+        }
+        else
+        {
             Output.WriteLine("No ClassExport");
         }
 
-        foreach (var export in Asset.Exports) {
-            if (export is FunctionExport e) {
+        foreach (var export in Asset.Exports)
+        {
+            if (export is FunctionExport e)
+            {
                 if (classExport == null) throw new InvalidOperationException("ClassExport found");
                 anyExport = true;
                 Output.WriteLine("FunctionExport " + e.ObjectName);
@@ -139,10 +164,13 @@ public class SummaryGenerator {
                 string functionName = e.ObjectName.ToString();
 
                 var functionLines = new Lines("Function " + functionName);
-                foreach (var prop in e.LoadedProperties) {
+                foreach (var prop in e.LoadedProperties)
+                {
                     var flags = new List<string>();
-                    foreach (EPropertyFlags flag in Enum.GetValues(typeof(EPropertyFlags))) {
-                        if (flag != EPropertyFlags.CPF_None && prop.PropertyFlags.HasFlag(flag)) {
+                    foreach (EPropertyFlags flag in Enum.GetValues(typeof(EPropertyFlags)))
+                    {
+                        if (flag != EPropertyFlags.CPF_None && prop.PropertyFlags.HasFlag(flag))
+                        {
                             flags.Add(flag.ToString());
                         }
                     }
@@ -164,9 +192,11 @@ public class SummaryGenerator {
 
                 uint index = 0;
                 Console.WriteLine(functionName);
-                foreach (var exp in e.ScriptBytecode) {
+                foreach (var exp in e.ScriptBytecode)
+                {
                     var intr = Stringify(exp, ref index);
-                    foreach (var (nest, line) in intr.Content.GetLines()) {
+                    foreach (var (nest, line) in intr.Content.GetLines())
+                    {
                         var prefix = nest == 0 ? intr.Address.ToString() + ": " : "";
                         Output.WriteLine(prefix.PadRight((nest + 2) * 4) + line);
                     }
@@ -177,12 +207,14 @@ public class SummaryGenerator {
                     node.Attributes["style"] = "filled";
                     node.Attributes["fillcolor"] = "#eeeeee";
 
-                    foreach (var reference in intr.ReferencedAddresses) {
+                    foreach (var reference in intr.ReferencedAddresses)
+                    {
                         var edge = new Edge(
                                 $"{e.ObjectName.ToString()}__{intr.Address.ToString()}",
                                 $"{reference.FunctionName ?? e.ObjectName.ToString()}__{reference.Address.ToString()}"
                             );
-                        switch (reference.Type) {
+                        switch (reference.Type)
+                        {
                             case ReferenceType.Normal:
                                 {
                                     break;
@@ -229,7 +261,8 @@ public class SummaryGenerator {
         return anyExport;
     }
 
-    public static string SanitizeLabel(string str) {
+    public static string SanitizeLabel(string str)
+    {
         return str
             .Replace("{", "\\{")
             .Replace("}", "\\}")
@@ -238,25 +271,30 @@ public class SummaryGenerator {
             .Replace("\"", "\\\"");
     }
 
-    public static string LinesToField(Lines lines) {
+    public static string LinesToField(Lines lines)
+    {
         var label = new StringWriter();
-        foreach (var (nest, line) in lines.GetLines()) {
+        foreach (var (nest, line) in lines.GetLines())
+        {
             label.Write("".PadRight(nest * 2, '\u00A0') + SanitizeLabel(line) + "\\l");
         }
         return label.ToString();
     }
 
-    Instruction Stringify(KismetExpression exp, ref uint index) {
+    Instruction Stringify(KismetExpression exp, ref uint index)
+    {
         var referencedAddresses = new List<Reference>();
         var address = index;
         var content = Stringify(exp, ref index, referencedAddresses, true);
         return new Instruction(address, referencedAddresses, content);
     }
 
-    Lines Stringify(KismetExpression exp, ref uint index, List<Reference> referencedAddresses, bool top = false) {
+    Lines Stringify(KismetExpression exp, ref uint index, List<Reference> referencedAddresses, bool top = false)
+    {
         index++;
         Lines lines;
-        switch (exp) {
+        switch (exp)
+        {
             case EX_PushExecutionFlow e:
                 {
                     lines = new Lines("EX_" + e.Inst + " " + e.PushingAddress);
@@ -411,21 +449,22 @@ public class SummaryGenerator {
                 {
                     lines = new Lines("EX_" + e.Inst + " " + e.ConversionType);
                     index++;
-                    switch (e.ConversionType) {
+                    switch (e.ConversionType)
+                    {
                         case ECastToken.InterfaceToBool:
-                        {
-                            break;
-                        }
+                            {
+                                break;
+                            }
                         case ECastToken.ObjectToBool:
-                        {
-                            break;
-                        }
+                            {
+                                break;
+                            }
                         case ECastToken.ObjectToInterface:
-                        {
-                            index += 8;
-                            // TODO InterfaceClass
-                            break;
-                        }
+                            {
+                                index += 8;
+                                // TODO InterfaceClass
+                                break;
+                            }
                     }
                     lines.Add(Stringify(e.Target, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -447,7 +486,8 @@ public class SummaryGenerator {
                 {
                     lines = new Lines("EX_" + e.Inst + " " + ToString(e.StackNode));
                     index += 8;
-                    foreach (var arg in e.Parameters) {
+                    foreach (var arg in e.Parameters)
+                    {
                         lines.Add(Stringify(arg, ref index, referencedAddresses));
                     }
                     index++;
@@ -461,7 +501,8 @@ public class SummaryGenerator {
                     lines.Add(Stringify(e.IndexTerm, ref index, referencedAddresses));
                     lines.Add("OffsetToSwitchEnd = " + e.EndGotoOffset);
                     var ci = -1;
-                    foreach (var c in e.Cases) {
+                    foreach (var c in e.Cases)
+                    {
                         ci++;
                         var nested = new Lines("case " + ci + ":");
                         nested.Add(Stringify(c.CaseIndexValueTerm, ref index, referencedAddresses));
@@ -486,7 +527,8 @@ public class SummaryGenerator {
                 {
                     lines = new Lines("EX_" + e.Inst);
                     index++;
-                    switch (e.Value.TextLiteralType) {
+                    switch (e.Value.TextLiteralType)
+                    {
                         case EBlueprintTextLiteralType.Empty:
                             {
                                 break;
@@ -575,7 +617,8 @@ public class SummaryGenerator {
                     index += 8;
                     //lines.Add("IsSelfContext = " + (Asset.GetClassExport().OuterIndex.Index == e.StackNode.Index));
                     lines.Add(Stringify(e.Delegate, ref index, referencedAddresses));
-                    foreach (var arg in e.Parameters) {
+                    foreach (var arg in e.Parameters)
+                    {
                         lines.Add(Stringify(arg, ref index, referencedAddresses));
                     }
                     index++;
@@ -586,18 +629,25 @@ public class SummaryGenerator {
                 {
                     lines = new Lines("EX_" + e.Inst + " " + ToString(e.StackNode));
                     index += 8;
-                    foreach (var arg in e.Parameters) {
+                    foreach (var arg in e.Parameters)
+                    {
                         lines.Add(Stringify(arg, ref index, referencedAddresses));
                     }
                     index++;
 
-                    if (e.Parameters.Length == 1 && e.Parameters[0] is EX_IntConst value) {
-                        if (e.StackNode.IsExport()) {
-                            referencedAddresses.Add(new Reference((uint) value.Value, ReferenceType.Function, e.StackNode.ToExport(Asset).ObjectName.ToString()));
-                        } else {
+                    if (e.Parameters.Length == 1 && e.Parameters[0] is EX_IntConst value)
+                    {
+                        if (e.StackNode.IsExport())
+                        {
+                            referencedAddresses.Add(new Reference((uint)value.Value, ReferenceType.Function, e.StackNode.ToExport(Asset).ObjectName.ToString()));
+                        }
+                        else
+                        {
                             Console.Error.WriteLine("WARN: Unimplemented StackNode import");
                         }
-                    } else {
+                    }
+                    else
+                    {
                         Console.Error.WriteLine("WARN: Unimplemented non-EX_IntConst");
                     }
 
@@ -608,7 +658,8 @@ public class SummaryGenerator {
                 {
                     lines = new Lines("EX_" + e.Inst + " " + ToString(e.StackNode));
                     index += 8;
-                    foreach (var arg in e.Parameters) {
+                    foreach (var arg in e.Parameters)
+                    {
                         lines.Add(Stringify(arg, ref index, referencedAddresses));
                     }
                     index++;
@@ -619,7 +670,8 @@ public class SummaryGenerator {
                 {
                     lines = new Lines("EX_" + e.Inst + " " + e.VirtualFunctionName);
                     index += 12;
-                    foreach (var arg in e.Parameters) {
+                    foreach (var arg in e.Parameters)
+                    {
                         lines.Add(Stringify(arg, ref index, referencedAddresses));
                     }
                     index++;
@@ -630,16 +682,21 @@ public class SummaryGenerator {
                 {
                     lines = new Lines("EX_" + e.Inst + " " + e.VirtualFunctionName);
                     index += 12;
-                    foreach (var arg in e.Parameters) {
+                    foreach (var arg in e.Parameters)
+                    {
                         lines.Add(Stringify(arg, ref index, referencedAddresses));
                     }
                     index++;
 
-                    if (e.Parameters.Length == 1 && e.Parameters[0] is EX_IntConst value) {
-                        if (Asset.Exports.Any(ex => ex is FunctionExport && ex.ObjectName.ToString() == e.VirtualFunctionName.ToString())) {
-                            referencedAddresses.Add(new Reference((uint) value.Value, ReferenceType.Function, e.VirtualFunctionName.ToString()));
+                    if (e.Parameters.Length == 1 && e.Parameters[0] is EX_IntConst value)
+                    {
+                        if (Asset.Exports.Any(ex => ex is FunctionExport && ex.ObjectName.ToString() == e.VirtualFunctionName.ToString()))
+                        {
+                            referencedAddresses.Add(new Reference((uint)value.Value, ReferenceType.Function, e.VirtualFunctionName.ToString()));
                         }
-                    } else {
+                    }
+                    else
+                    {
                         Console.Error.WriteLine("WARN: Unimplemented non-EX_IntConst");
                     }
 
@@ -683,28 +740,41 @@ public class SummaryGenerator {
                     lines = new Lines("EX_" + e.Inst + " " + ToString(e.Struct));
                     index += 8;
                     index += 4;
-                    foreach (var arg in e.Value) {
+                    foreach (var arg in e.Value)
+                    {
                         lines.Add(Stringify(arg, ref index, referencedAddresses));
                     }
                     index++;
 
-                    if (e.Struct.IsImport()) {
+                    if (e.Struct.IsImport())
+                    {
                         var s = e.Struct.ToImport(Asset);
-                        if (s.ObjectName.ToString() == "LatentActionInfo" && s.ClassPackage.ToString() == "/Script/CoreUObject") {
-                            if (e.Value.Length != 4) {
+                        if (s.ObjectName.ToString() == "LatentActionInfo" && s.ClassPackage.ToString() == "/Script/CoreUObject")
+                        {
+                            if (e.Value.Length != 4)
+                            {
                                 throw new Exception("Struct LatentActionInfo should have 4 members");
                             }
-                            if (e.Value[0] is EX_SkipOffsetConst skip) {
-                                if (e.Value[2] is EX_NameConst name) {
-                                    if (e.Value[3] is EX_Self self) {
+                            if (e.Value[0] is EX_SkipOffsetConst skip)
+                            {
+                                if (e.Value[2] is EX_NameConst name)
+                                {
+                                    if (e.Value[3] is EX_Self self)
+                                    {
                                         referencedAddresses.Add(new Reference(skip.Value, ReferenceType.Skip, name.Value.ToString()));
-                                    } else {
+                                    }
+                                    else
+                                    {
                                         Console.Error.WriteLine("WARN: Unimplemented LatentActionInfo to other than EX_Self");
                                     }
-                                } else {
+                                }
+                                else
+                                {
                                     Console.Error.WriteLine("WARN: Expected EX_NameConst but found " + e.Value[2]);
                                 }
-                            } else {
+                            }
+                            else
+                            {
                                 Console.Error.WriteLine("WARN: Expected EX_SkipOffsetConst but found " + e.Value[0]);
                             }
                         }
@@ -717,7 +787,8 @@ public class SummaryGenerator {
                 {
                     lines = new Lines("EX_" + e.Inst);
                     lines.Add(Stringify(e.AssigningProperty, ref index, referencedAddresses));
-                    foreach (var arg in e.Elements) {
+                    foreach (var arg in e.Elements)
+                    {
                         lines.Add(Stringify(arg, ref index, referencedAddresses));
                     }
                     index++;
@@ -729,7 +800,8 @@ public class SummaryGenerator {
                     lines = new Lines("EX_" + e.Inst);
                     lines.Add(Stringify(e.SetProperty, ref index, referencedAddresses));
                     index += 4;
-                    foreach (var arg in e.Elements) {
+                    foreach (var arg in e.Elements)
+                    {
                         lines.Add(Stringify(arg, ref index, referencedAddresses));
                     }
                     index++;
@@ -742,7 +814,8 @@ public class SummaryGenerator {
                     lines.Add(Stringify(e.MapProperty, ref index, referencedAddresses));
                     index += 4;
                     var ei = -1;
-                    foreach (var pair in Pairs(e.Elements)) {
+                    foreach (var pair in Pairs(e.Elements))
+                    {
                         ei++;
                         var entry = new Lines($"entry {ei}:");
                         lines.Add(Stringify(pair.Item1, ref index, referencedAddresses));
@@ -760,7 +833,8 @@ public class SummaryGenerator {
                     lines.Add("ValueProperty: " + ToString(e.ValueProperty));
                     index += 4;
                     var ei = -1;
-                    foreach (var pair in Pairs(e.Elements)) {
+                    foreach (var pair in Pairs(e.Elements))
+                    {
                         ei++;
                         var entry = new Lines($"entry {ei}:");
                         lines.Add(Stringify(pair.Item1, ref index, referencedAddresses));
@@ -842,14 +916,14 @@ public class SummaryGenerator {
             case EX_StringConst e:
                 {
                     lines = new Lines("EX_" + e.Inst + " " + e.Value);
-                    index += 1 + (uint) e.Value.Length;
+                    index += 1 + (uint)e.Value.Length;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_UnicodeStringConst e:
                 {
                     lines = new Lines("EX_" + e.Inst + " " + e.Value);
-                    index += (uint) (e.Value.Length + 1) * 2;
+                    index += (uint)(e.Value.Length + 1) * 2;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
@@ -859,7 +933,8 @@ public class SummaryGenerator {
                     index += 8;
                     lines.Add(ToString(e.InnerProperty));
                     index += 4;
-                    foreach (var arg in e.Elements) {
+                    foreach (var arg in e.Elements)
+                    {
                         lines.Add(Stringify(arg, ref index, referencedAddresses));
                     }
                     index++;
@@ -933,31 +1008,39 @@ public class SummaryGenerator {
         return lines;
     }
 
-    static IEnumerable<(KismetExpression, KismetExpression)> Pairs(IEnumerable<KismetExpression> input) {
+    static IEnumerable<(KismetExpression, KismetExpression)> Pairs(IEnumerable<KismetExpression> input)
+    {
         var e = input.GetEnumerator();
-        try {
-            while (e.MoveNext()) {
+        try
+        {
+            while (e.MoveNext())
+            {
                 var a = e.Current;
-                if (e.MoveNext()) {
+                if (e.MoveNext())
+                {
                     yield return (a, e.Current);
                 }
             }
-        } finally {
+        }
+        finally
+        {
             (e as IDisposable)?.Dispose();
         }
     }
 
-    static string ReadString(KismetExpression exp, ref uint index) {
+    static string ReadString(KismetExpression exp, ref uint index)
+    {
         index++;
-        switch (exp) {
+        switch (exp)
+        {
             case EX_StringConst e:
                 {
-                    index += (uint) e.Value.Length + 1;
+                    index += (uint)e.Value.Length + 1;
                     return e.Value;
                 }
             case EX_UnicodeStringConst e:
                 {
-                    index += 2 * ((uint) e.Value.Length + 1);
+                    index += 2 * ((uint)e.Value.Length + 1);
                     return e.Value;
                 }
             default:
@@ -966,47 +1049,62 @@ public class SummaryGenerator {
         }
     }
 
-    string ToString(KismetPropertyPointer pointer) {
-        if (pointer.Old != null) {
+    string ToString(KismetPropertyPointer pointer)
+    {
+        if (pointer.Old != null)
+        {
             return ToString(pointer.Old);
         }
-        if (pointer.New != null) {
+        if (pointer.New != null)
+        {
             return ToString(pointer.New.Path);
         }
         throw new Exception("Unreachable");
     }
 
-    string ToString(FPackageIndex index) {
-        string getChain(FPackageIndex child) {
-            if (child.IsNull()) {
+    string ToString(FPackageIndex index)
+    {
+        string getChain(FPackageIndex child)
+        {
+            if (child.IsNull())
+            {
                 return "";
             }
-            if (child.IsImport()) {
+            if (child.IsImport())
+            {
                 var a = child.ToImport(Asset);
                 return $"{getChain(a.OuterIndex)}{a.ObjectName}->";
             }
-            if (child.IsExport()) {
+            if (child.IsExport())
+            {
                 var a = child.ToExport(Asset);
                 return $"{getChain(a.OuterIndex)}{a.ObjectName}->";
             }
             throw new NotImplementedException("Unreachable");
 
         }
-        if (index.IsNull()) {
+        if (index.IsNull())
+        {
             return "null";
-        } else if (index.IsExport()) {
+        }
+        else if (index.IsExport())
+        {
             return $"export {getChain(index.ToExport(Asset).OuterIndex)}{index.ToExport(Asset).ObjectName}";
-        } else if (index.IsImport()) {
+        }
+        else if (index.IsImport())
+        {
             return $"import {getChain(index.ToImport(Asset).OuterIndex)}{index.ToImport(Asset).ObjectName}";
         }
         throw new Exception("Unreachable");
     }
 
-    static void PrintIndent(TextWriter Output, int indent, string str, string prefix = "") {
+    static void PrintIndent(TextWriter Output, int indent, string str, string prefix = "")
+    {
         Output.WriteLine((indent == 0 ? prefix : "").PadRight((indent + 2) * 4) + str);
     }
 
-    static string ToString(FName[] arr) {
+    static string ToString(FName[] arr)
+    {
         return "[" + String.Join(",", (object[])arr) + "]";
     }
 }

@@ -3,7 +3,8 @@ namespace KismetAnalyzer;
 using Xunit;
 using Dot;
 
-public class DotTests {
+public class DotTests
+{
 
     [Fact]
     public void TestEmptyGraph()

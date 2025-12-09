@@ -8,12 +8,15 @@ using UAssetAPI.PropertyTypes.Objects;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.Kismet.Bytecode.Expressions;
 
-public class Kismet {
-    public static void ShiftAddressses(KismetExpression exp, int offset) {
-        switch (exp) {
+public class Kismet
+{
+    public static void ShiftAddressses(KismetExpression exp, int offset)
+    {
+        switch (exp)
+        {
             case EX_PushExecutionFlow e:
                 {
-                    e.PushingAddress = (uint) (e.PushingAddress + offset);
+                    e.PushingAddress = (uint)(e.PushingAddress + offset);
                     break;
                 }
             case EX_ComputedJump e:
@@ -23,12 +26,12 @@ public class Kismet {
                 }
             case EX_Jump e:
                 {
-                    e.CodeOffset = (uint) (e.CodeOffset + offset);
+                    e.CodeOffset = (uint)(e.CodeOffset + offset);
                     break;
                 }
             case EX_JumpIfNot e:
                 {
-                    e.CodeOffset = (uint) (e.CodeOffset + offset);
+                    e.CodeOffset = (uint)(e.CodeOffset + offset);
                     break;
                 }
             case EX_LocalFinalFunction e:
@@ -49,18 +52,21 @@ public class Kismet {
                 }
         }
     }
-    public static FPackageIndex? CopyExportTo((UAsset, FPackageIndex?) export, UAsset dst) {
+    public static FPackageIndex? CopyExportTo((UAsset, FPackageIndex?) export, UAsset dst)
+    {
         if (export.Item2 == null) return null;
         if (export.Item2.IsNull()) return export.Item2;
         // could potentially check if there is an existing matchin export but that's complex
         // maybe can check by name?
         var exp = export.Item2.ToExport(export.Item1);
-        switch (exp) {
+        switch (exp)
+        {
             case FunctionExport e:
                 {
                     var src = export.Item1;
 
-                    var fnDst = new FunctionExport() {
+                    var fnDst = new FunctionExport()
+                    {
                         IsInheritedInstance = e.IsInheritedInstance,
                         GeneratePublicHash = e.GeneratePublicHash,
 
@@ -119,24 +125,33 @@ public class Kismet {
         }
         */
     }
-    public static FPackageIndex? CopyImportTo((UAsset, FPackageIndex?) import, UAsset asset) {
+    public static FPackageIndex? CopyImportTo((UAsset, FPackageIndex?) import, UAsset asset)
+    {
         if (import.Item2 == null) return null;
         if (import.Item2.IsNull()) return import.Item2;
-        for (int i = 0; i < asset.Imports.Count; i++) {
+        for (int i = 0; i < asset.Imports.Count; i++)
+        {
             var existing = FPackageIndex.FromImport(i);
             if (AreImportsEqual(import, (asset, existing))) return existing;
         }
         var imp = import.Item2.ToImport(import.Item1);
-        if (imp.OuterIndex.IsNull()) {
+        if (imp.OuterIndex.IsNull())
+        {
             return asset.AddImport(new Import(imp.ClassPackage.ToString(), imp.ClassName.ToString(), FPackageIndex.FromRawIndex(0), imp.ObjectName.ToString(), false, asset));
-        } else {
+        }
+        else
+        {
             return asset.AddImport(new Import(imp.ClassPackage.ToString(), imp.ClassName.ToString(), CopyImportTo((import.Item1, imp.OuterIndex), asset), imp.ObjectName.ToString(), false, asset));
         }
     }
-    static bool AreImportsEqual((UAsset, FPackageIndex?) a, (UAsset, FPackageIndex?) b) {
-        if (a.Item2 == null || b.Item2 == null) {
+    static bool AreImportsEqual((UAsset, FPackageIndex?) a, (UAsset, FPackageIndex?) b)
+    {
+        if (a.Item2 == null || b.Item2 == null)
+        {
             return a.Item2 == null && b.Item2 == null;
-        } if (a.Item2.IsNull() || b.Item2.IsNull()) {
+        }
+        if (a.Item2.IsNull() || b.Item2.IsNull())
+        {
             return a.Item2.IsNull() && b.Item2.IsNull();
         }
         var importA = a.Item2.ToImport(a.Item1);
@@ -146,11 +161,14 @@ public class Kismet {
             && importA.ObjectName == importB.ObjectName
             && AreImportsEqual((a.Item1, importA.OuterIndex), (b.Item1, importB.OuterIndex));
     }
-    public static FProperty? CopyProperty(FProperty? prop, UAsset src, UAsset dst) {
-        switch (prop) {
+    public static FProperty? CopyProperty(FProperty? prop, UAsset src, UAsset dst)
+    {
+        switch (prop)
+        {
             case FGenericProperty p:
                 {
-                    return new FGenericProperty() {
+                    return new FGenericProperty()
+                    {
                         ArrayDim = p.ArrayDim,
                         ElementSize = p.ElementSize,
                         PropertyFlags = p.PropertyFlags,
@@ -165,7 +183,8 @@ public class Kismet {
                 }
             case FObjectProperty p:
                 {
-                    return new FObjectProperty() {
+                    return new FObjectProperty()
+                    {
                         PropertyClass = CopyImportTo((src, p.PropertyClass), dst),
                         ArrayDim = p.ArrayDim,
                         ElementSize = p.ElementSize,
@@ -181,7 +200,8 @@ public class Kismet {
                 }
             case FInterfaceProperty p:
                 {
-                    return new FInterfaceProperty() {
+                    return new FInterfaceProperty()
+                    {
                         InterfaceClass = CopyImportTo((src, p.InterfaceClass), dst),
                         ArrayDim = p.ArrayDim,
                         ElementSize = p.ElementSize,
@@ -197,7 +217,8 @@ public class Kismet {
                 }
             case FStructProperty p:
                 {
-                    return new FStructProperty() {
+                    return new FStructProperty()
+                    {
                         Struct = CopyImportTo((src, p.Struct), dst),
                         ArrayDim = p.ArrayDim,
                         ElementSize = p.ElementSize,
@@ -213,7 +234,8 @@ public class Kismet {
                 }
             case FArrayProperty p:
                 {
-                    return new FArrayProperty() {
+                    return new FArrayProperty()
+                    {
                         Inner = CopyProperty(p.Inner, src, dst),
                         ArrayDim = p.ArrayDim,
                         ElementSize = p.ElementSize,
@@ -229,7 +251,8 @@ public class Kismet {
                 }
             case FBoolProperty p:
                 {
-                    return new FBoolProperty() {
+                    return new FBoolProperty()
+                    {
                         FieldSize = p.FieldSize,
                         ByteOffset = p.ByteOffset,
                         ByteMask = p.ByteMask,
@@ -251,10 +274,13 @@ public class Kismet {
         }
         throw new NotImplementedException($"FProperty {prop} not implemented");
     }
-    public static UProperty CopyUProperty(UProperty prop, UAsset src, UAsset dst) {
-        switch (prop) {
+    public static UProperty CopyUProperty(UProperty prop, UAsset src, UAsset dst)
+    {
+        switch (prop)
+        {
             case UObjectProperty p:
-                return new UObjectProperty() {
+                return new UObjectProperty()
+                {
                     // UField
                     Next = null,
 
@@ -270,7 +296,8 @@ public class Kismet {
                     PropertyClass = CopyImportTo((src, p.PropertyClass), dst),
                 };
             case UStructProperty p:
-                return new UStructProperty() {
+                return new UStructProperty()
+                {
                     // UField
                     Next = null,
 
@@ -288,9 +315,11 @@ public class Kismet {
         }
         throw new NotImplementedException($"UProperty {prop} not implemented");
     }
-    public static List<FPackageIndex> GetDependencies(UProperty prop) {
+    public static List<FPackageIndex> GetDependencies(UProperty prop)
+    {
         var dependencies = new List<FPackageIndex>();
-        switch (prop) {
+        switch (prop)
+        {
             case UObjectProperty p:
                 dependencies.Add(p.PropertyClass);
                 break;
@@ -300,51 +329,63 @@ public class Kismet {
         }
         return dependencies;
     }
-    public static FFieldPath? CopyFieldPath(FFieldPath? p, UAsset src, UAsset dst, FunctionExport fnSrc, FunctionExport fnDst) {
+    public static FFieldPath? CopyFieldPath(FFieldPath? p, UAsset src, UAsset dst, FunctionExport fnSrc, FunctionExport fnDst)
+    {
         if (p == null) return null;
-        if (p.ResolvedOwner.IsNull()) {
-            return new FFieldPath() {
+        if (p.ResolvedOwner.IsNull())
+        {
+            return new FFieldPath()
+            {
                 Path = p.Path.Select(p => p.Transfer(dst)).ToArray(),
                 ResolvedOwner = FPackageIndex.FromRawIndex(0),
             };
         }
-        if (p.ResolvedOwner.IsImport()) {
-            return new FFieldPath() {
+        if (p.ResolvedOwner.IsImport())
+        {
+            return new FFieldPath()
+            {
                 Path = p.Path.Select(p => p.Transfer(dst)).ToArray(),
                 ResolvedOwner = CopyImportTo((src, p.ResolvedOwner), dst),
             };
         }
         if (p.Path.Length > 1) throw new NotImplementedException($"FFieldPath.Length > 1: {String.Join(", ", p.Path.Select(p => p.ToString()))}");
-        if (p.ResolvedOwner.ToExport(src) == fnSrc) {
+        if (p.ResolvedOwner.ToExport(src) == fnSrc)
+        {
             var prop = fnSrc.LoadedProperties.First(l => l.Name.ToString() == p.Path[0].ToString());
             if (prop == null) throw new NotImplementedException("Property missing");
 
             var existing = fnDst.LoadedProperties!.FirstOrDefault(l => l!.Name.ToString() == p.Path[0].ToString(), null);
-            if (existing == null) { // prop doesn't already exist so copy it over
+            if (existing == null)
+            { // prop doesn't already exist so copy it over
                 // TODO check type of prop == existing, only checking by name currently
                 fnDst.LoadedProperties = fnDst.LoadedProperties.Append(CopyProperty(prop, src, dst)).ToArray();
             }
 
-            return new FFieldPath() {
+            return new FFieldPath()
+            {
                 Path = p.Path.Select(p => p.Transfer(dst)).ToArray(),
                 ResolvedOwner = FPackageIndex.FromExport(dst.Exports.IndexOf(fnDst)), // TODO avoid IndexOf
             };
         }
         throw new NotImplementedException("FFieldPath points to an export that is not the source function");
     }
-    public static FPackageIndex? CopyPropertyExport(FPackageIndex p, UAsset src, UAsset dst, FunctionExport fnSrc, FunctionExport fnDst) {
+    public static FPackageIndex? CopyPropertyExport(FPackageIndex p, UAsset src, UAsset dst, FunctionExport fnSrc, FunctionExport fnDst)
+    {
         if (p == null) return null;
-        if (p.ToExport(src) is PropertyExport property) {
+        if (p.ToExport(src) is PropertyExport property)
+        {
             var fnPiSrc = FPackageIndex.FromExport(src.Exports.IndexOf(fnSrc)); // TODO avoid IndexOf
             var fnPiDst = FPackageIndex.FromExport(dst.Exports.IndexOf(fnDst)); // TODO avoid IndexOf
 
             var existing = dst.Exports.FindIndex(e => e is PropertyExport && e.OuterIndex.Equals(fnPiDst) && e.ObjectName.ToString() == property.ObjectName.ToString());
-            if (existing != -1) {
+            if (existing != -1)
+            {
                 return FPackageIndex.FromExport(existing);
             }
 
             var uprop = CopyUProperty(property.Property, src, dst);
-            var newProperty = new PropertyExport() {
+            var newProperty = new PropertyExport()
+            {
                 //PropertyExport
                 Property = uprop,
 
@@ -366,7 +407,7 @@ public class Kismet {
                 SerializationBeforeSerializationDependencies = new List<FPackageIndex>(),
                 CreateBeforeSerializationDependencies = GetDependencies(uprop),
                 SerializationBeforeCreateDependencies = new List<FPackageIndex>(),
-                CreateBeforeCreateDependencies = new List<FPackageIndex>() {fnPiDst},
+                CreateBeforeCreateDependencies = new List<FPackageIndex>() { fnPiDst },
                 Asset = dst,
 
                 //FObjectResource
@@ -384,28 +425,36 @@ public class Kismet {
             fnDst.SerializationBeforeSerializationDependencies.Add(pi);
 
             return pi;
-        } else {
+        }
+        else
+        {
             throw new NotImplementedException("expected PropertyExport");
         }
     }
-    public static KismetPropertyPointer CopyKismetPropertyPointer(KismetPropertyPointer p, UAsset src, UAsset dst, FunctionExport fnSrc, FunctionExport fnDst) {
-        return new KismetPropertyPointer() {
+    public static KismetPropertyPointer CopyKismetPropertyPointer(KismetPropertyPointer p, UAsset src, UAsset dst, FunctionExport fnSrc, FunctionExport fnDst)
+    {
+        return new KismetPropertyPointer()
+        {
             Old = CopyPropertyExport(p.Old, src, dst, fnSrc, fnDst),
             New = CopyFieldPath(p.New, src, dst, fnSrc, fnDst),
         };
     }
-    public static KismetExpression? CopyExpressionTo(KismetExpression? exp, UAsset src, UAsset dst, FunctionExport fnSrc, FunctionExport fnDst) {
+    public static KismetExpression? CopyExpressionTo(KismetExpression? exp, UAsset src, UAsset dst, FunctionExport fnSrc, FunctionExport fnDst)
+    {
         if (exp == null) return null;
-        switch (exp) {
+        switch (exp)
+        {
             case EX_PushExecutionFlow e:
                 {
-                    return new EX_PushExecutionFlow() {
+                    return new EX_PushExecutionFlow()
+                    {
                         PushingAddress = e.PushingAddress,
                     };
                 }
             case EX_Context e:
                 {
-                    return new EX_Context() {
+                    return new EX_Context()
+                    {
                         ObjectExpression = CopyExpressionTo(e.ObjectExpression, src, dst, fnSrc, fnDst),
                         Offset = e.Offset,
                         RValuePointer = CopyKismetPropertyPointer(e.RValuePointer, src, dst, fnSrc, fnDst),
@@ -414,69 +463,80 @@ public class Kismet {
                 }
             case EX_ObjectConst e:
                 {
-                    return new EX_ObjectConst() {
+                    return new EX_ObjectConst()
+                    {
                         Value = CopyImportTo((src, e.Value), dst),
                     };
                 }
             case EX_LocalVirtualFunction e:
                 {
-                    return new EX_LocalVirtualFunction() {
+                    return new EX_LocalVirtualFunction()
+                    {
                         VirtualFunctionName = e.VirtualFunctionName.Transfer(dst),
                         Parameters = e.Parameters.Select(p => CopyExpressionTo(p, src, dst, fnSrc, fnDst)).ToArray(),
                     };
                 }
             case EX_SkipOffsetConst e:
                 {
-                    return new EX_SkipOffsetConst() {
+                    return new EX_SkipOffsetConst()
+                    {
                         Value = e.Value,
                     };
                 }
             case EX_BitFieldConst e:
                 {
-                    return new EX_BitFieldConst() {
+                    return new EX_BitFieldConst()
+                    {
                         Property = CopyKismetPropertyPointer(e.Property, src, dst, fnSrc, fnDst),
                         Value = e.Value,
                     };
                 }
             case EX_ByteConst e:
                 {
-                    return new EX_ByteConst() {
+                    return new EX_ByteConst()
+                    {
                         Value = e.Value,
                     };
                 }
             case EX_IntConst e:
                 {
-                    return new EX_IntConst() {
+                    return new EX_IntConst()
+                    {
                         Value = e.Value,
                     };
                 }
             case EX_NothingInt32 e:
                 {
-                    return new EX_NothingInt32() {
+                    return new EX_NothingInt32()
+                    {
                         Value = e.Value,
                     };
                 }
             case EX_FloatConst e:
                 {
-                    return new EX_FloatConst() {
+                    return new EX_FloatConst()
+                    {
                         Value = e.Value,
                     };
                 }
             case EX_DoubleConst e:
                 {
-                    return new EX_DoubleConst() {
+                    return new EX_DoubleConst()
+                    {
                         Value = e.Value,
                     };
                 }
             case EX_VectorConst e:
                 {
-                    return new EX_VectorConst() {
+                    return new EX_VectorConst()
+                    {
                         Value = e.Value,
                     };
                 }
             case EX_Vector3fConst e:
                 {
-                    return new EX_Vector3fConst() {
+                    return new EX_Vector3fConst()
+                    {
                         X = e.X,
                         Y = e.Y,
                         Z = e.Z,
@@ -484,26 +544,31 @@ public class Kismet {
                 }
             case EX_RotationConst e:
                 {
-                    return new EX_RotationConst() {
+                    return new EX_RotationConst()
+                    {
                         Value = e.Value,
                     };
                 }
             case EX_StringConst e:
                 {
-                    return new EX_StringConst() {
+                    return new EX_StringConst()
+                    {
                         Value = e.Value,
                     };
                 }
             case EX_NameConst e:
                 {
-                    return new EX_NameConst() {
+                    return new EX_NameConst()
+                    {
                         Value = e.Value.Transfer(dst),
                     };
                 }
             case EX_TextConst e:
                 {
-                    return new EX_TextConst() {
-                        Value = new FScriptText() {
+                    return new EX_TextConst()
+                    {
+                        Value = new FScriptText()
+                        {
                             TextLiteralType = e.Value.TextLiteralType,
                             LocalizedSource = CopyExpressionTo(e.Value.LocalizedSource, src, dst, fnSrc, fnDst),
                             LocalizedKey = CopyExpressionTo(e.Value.LocalizedKey, src, dst, fnSrc, fnDst),
@@ -542,7 +607,8 @@ public class Kismet {
                 }
             case EX_Let e:
                 {
-                    return new EX_Let() {
+                    return new EX_Let()
+                    {
                         Value = CopyKismetPropertyPointer(e.Value, src, dst, fnSrc, fnDst),
                         Variable = CopyExpressionTo(e.Variable, src, dst, fnSrc, fnDst),
                         Expression = CopyExpressionTo(e.Expression, src, dst, fnSrc, fnDst),
@@ -550,53 +616,61 @@ public class Kismet {
                 }
             case EX_LocalVariable e:
                 {
-                    return new EX_LocalVariable() {
+                    return new EX_LocalVariable()
+                    {
                         Variable = CopyKismetPropertyPointer(e.Variable, src, dst, fnSrc, fnDst),
                     };
                 }
             case EX_LocalOutVariable e:
                 {
-                    return new EX_LocalOutVariable() {
+                    return new EX_LocalOutVariable()
+                    {
                         Variable = CopyKismetPropertyPointer(e.Variable, src, dst, fnSrc, fnDst),
                     };
                 }
             case EX_CallMath e:
                 {
-                    return new EX_CallMath() {
+                    return new EX_CallMath()
+                    {
                         StackNode = CopyImportTo((src, e.StackNode), dst),
                         Parameters = e.Parameters.Select(p => CopyExpressionTo(p, src, dst, fnSrc, fnDst)).ToArray(),
                     };
                 }
             case EX_FinalFunction e:
                 {
-                    return new EX_FinalFunction() {
+                    return new EX_FinalFunction()
+                    {
                         StackNode = CopyImportTo((src, e.StackNode), dst),
                         Parameters = e.Parameters.Select(p => CopyExpressionTo(p, src, dst, fnSrc, fnDst)).ToArray(),
                     };
                 }
             case EX_Return e:
                 {
-                    return new EX_Return() {
+                    return new EX_Return()
+                    {
                         ReturnExpression = CopyExpressionTo(e.ReturnExpression, src, dst, fnSrc, fnDst),
                     };
                 }
             case EX_LetObj e:
                 {
-                    return new EX_LetObj() {
+                    return new EX_LetObj()
+                    {
                         VariableExpression = CopyExpressionTo(e.VariableExpression, src, dst, fnSrc, fnDst),
                         AssignmentExpression = CopyExpressionTo(e.AssignmentExpression, src, dst, fnSrc, fnDst),
                     };
                 }
             case EX_LetBool e:
                 {
-                    return new EX_LetBool() {
+                    return new EX_LetBool()
+                    {
                         VariableExpression = CopyExpressionTo(e.VariableExpression, src, dst, fnSrc, fnDst),
                         AssignmentExpression = CopyExpressionTo(e.AssignmentExpression, src, dst, fnSrc, fnDst),
                     };
                 }
             case EX_StructConst e:
                 {
-                    return new EX_StructConst() {
+                    return new EX_StructConst()
+                    {
                         Struct = CopyImportTo((src, e.Struct), dst),
                         StructSize = e.StructSize,
                         Value = e.Value.Select(p => CopyExpressionTo(p, src, dst, fnSrc, fnDst)).ToArray(),
@@ -604,27 +678,31 @@ public class Kismet {
                 }
             case EX_StructMemberContext e:
                 {
-                    return new EX_StructMemberContext() {
+                    return new EX_StructMemberContext()
+                    {
                         StructMemberExpression = CopyKismetPropertyPointer(e.StructMemberExpression, src, dst, fnSrc, fnDst),
                         StructExpression = CopyExpressionTo(e.StructExpression, src, dst, fnSrc, fnDst),
                     };
                 }
             case EX_InterfaceContext e:
                 {
-                    return new EX_InterfaceContext() {
+                    return new EX_InterfaceContext()
+                    {
                         InterfaceValue = CopyExpressionTo(e.InterfaceValue, src, dst, fnSrc, fnDst),
                     };
                 }
             case EX_VirtualFunction e:
                 {
-                    return new EX_VirtualFunction() {
+                    return new EX_VirtualFunction()
+                    {
                         VirtualFunctionName = e.VirtualFunctionName.Transfer(dst),
                         Parameters = e.Parameters.Select(p => CopyExpressionTo(p, src, dst, fnSrc, fnDst)).ToArray(),
                     };
                 }
             case EX_SetArray e:
                 {
-                    return new EX_SetArray() {
+                    return new EX_SetArray()
+                    {
                         AssigningProperty = CopyExpressionTo(e.AssigningProperty, src, dst, fnSrc, fnDst),
                         ArrayInnerProp = CopyImportTo((src, e.ArrayInnerProp), dst),
                         Elements = e.Elements.Select(p => CopyExpressionTo(p, src, dst, fnSrc, fnDst)).ToArray(),
@@ -632,27 +710,31 @@ public class Kismet {
                 }
             case EX_InstanceVariable e:
                 {
-                    return new EX_InstanceVariable() {
+                    return new EX_InstanceVariable()
+                    {
                         Variable = CopyKismetPropertyPointer(e.Variable, src, dst, fnSrc, fnDst),
                     };
                 }
             case EX_DynamicCast e:
                 {
-                    return new EX_DynamicCast() {
+                    return new EX_DynamicCast()
+                    {
                         ClassPtr = CopyImportTo((src, e.ClassPtr), dst),
                         Target = CopyExpressionTo(e.Target, src, dst, fnSrc, fnDst),
                     };
                 }
             case EX_PrimitiveCast e:
                 {
-                    return new EX_PrimitiveCast() {
+                    return new EX_PrimitiveCast()
+                    {
                         ConversionType = e.ConversionType,
                         Target = CopyExpressionTo(e.Target, src, dst, fnSrc, fnDst),
                     };
                 }
             case EX_JumpIfNot e:
                 {
-                    return new EX_JumpIfNot() {
+                    return new EX_JumpIfNot()
+                    {
                         CodeOffset = e.CodeOffset, // TODO wtf to do about jumps
                         BooleanExpression = CopyExpressionTo(e.BooleanExpression, src, dst, fnSrc, fnDst),
                     };
@@ -676,10 +758,12 @@ public class Kismet {
         }
     }
 
-    public static IEnumerable<(uint, KismetExpression)> GetOffsets(UAsset asset, KismetExpression[] bytecode) {
+    public static IEnumerable<(uint, KismetExpression)> GetOffsets(UAsset asset, KismetExpression[] bytecode)
+    {
         var offsets = new List<(uint, KismetExpression)>();
         uint offset = 0;
-        foreach (var inst in bytecode) {
+        foreach (var inst in bytecode)
+        {
             offsets.Add((offset, inst));
             offset += inst.GetSize(asset);
         }

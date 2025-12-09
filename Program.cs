@@ -23,8 +23,10 @@ using Dot;
 using Konsole;
 using System.Runtime.InteropServices;
 
-public class Program {
-    static int Main(string[] args) {
+public class Program
+{
+    static int Main(string[] args)
+    {
         var rootCommand = new RootCommand();
 
         var assetSource = new Argument<string>
@@ -72,8 +74,10 @@ public class Program {
         var dotPath = new Option<string>
             (name: "--dot",
             description: "Path to graphviz dot executable, otherwise will search PATH");
-        dotPath.AddValidator(result => {
-            if (!File.Exists(result.GetValueForOption(dotPath))) {
+        dotPath.AddValidator(result =>
+        {
+            if (!File.Exists(result.GetValueForOption(dotPath)))
+            {
                 result.ErrorMessage = "--dot path does not exist";
             }
         });
@@ -166,16 +170,19 @@ Leading underscores can be used to work around special function names being ille
 
         return 0;
     }
-    static IEnumerable<string> GetAssets(string directory) {
+    static IEnumerable<string> GetAssets(string directory)
+    {
         var enumOptions = new EnumerationOptions();
         enumOptions.IgnoreInaccessible = true;
         enumOptions.RecurseSubdirectories = true;
         return new[] { "*.uasset", "*.umap" }.SelectMany(pattern => Directory.EnumerateFiles(directory, pattern, enumOptions));
     }
-    static UAsset LoadAsset(EngineVersion ueVersion, string? mappings, string assetPath) {
+    static UAsset LoadAsset(EngineVersion ueVersion, string? mappings, string assetPath)
+    {
         return mappings != null ? new UAsset(assetPath, ueVersion, new Usmap(mappings)) : new UAsset(assetPath, ueVersion);
     }
-    static void WriteDotViewer(string dot, string outputPath, string? dotPath) {
+    static void WriteDotViewer(string dot, string outputPath, string? dotPath)
+    {
         ProcessStartInfo info = new ProcessStartInfo(dotPath ?? "dot");
         info.RedirectStandardInput = true;
         info.RedirectStandardOutput = true;
@@ -196,11 +203,13 @@ Leading underscores can be used to work around special function names being ille
         var template = new StreamReader(assembly.GetManifestResourceStream(resourceName)!).ReadToEnd();
         var html = template.Replace("[DATA]", Convert.ToBase64String(Encoding.UTF8.GetBytes(svgData)));
 
-        using(StreamWriter writetext = new StreamWriter(outputPath)) {
+        using (StreamWriter writetext = new StreamWriter(outputPath))
+        {
             writetext.Write(html);
         }
     }
-    static void Cfg(EngineVersion ueVersion, string? mappings, string assetPath, string? dotPath) {
+    static void Cfg(EngineVersion ueVersion, string? mappings, string assetPath, string? dotPath)
+    {
         UAsset asset = LoadAsset(ueVersion, mappings, assetPath);
 
         var dot = new StringWriter();
@@ -212,7 +221,8 @@ Leading underscores can be used to work around special function names being ille
 
         OpenUrl(outputPath);
     }
-    static void GenCfg(EngineVersion ueVersion, string? mappings, string assetPath, string outputDir) {
+    static void GenCfg(EngineVersion ueVersion, string? mappings, string assetPath, string outputDir)
+    {
         UAsset asset = LoadAsset(ueVersion, mappings, assetPath);
         var fileName = Path.GetFileName(assetPath);
         var output = new StreamWriter(Path.Join(outputDir, Path.ChangeExtension(fileName, ".txt")));
@@ -221,13 +231,15 @@ Leading underscores can be used to work around special function names being ille
         output.Close();
         dotOutput.Close();
     }
-    struct Progress {
-        public ProgressBar Bar {get; set;}
-        public TextWriter StdOut {get; set;}
-        public TextWriter StdError {get; set;}
-        public TextWriter NullOut {get; set;}
+    struct Progress
+    {
+        public ProgressBar Bar { get; set; }
+        public TextWriter StdOut { get; set; }
+        public TextWriter StdError { get; set; }
+        public TextWriter NullOut { get; set; }
     }
-    static void GenCfgTree(EngineVersion ueVersion, string? mappings, string assetInputDir, string output, string projectName, string? dotPath, bool showProgress) {
+    static void GenCfgTree(EngineVersion ueVersion, string? mappings, string assetInputDir, string output, string projectName, string? dotPath, bool showProgress)
+    {
         Directory.CreateDirectory(output);
 
         var graph = new Graph("digraph");
@@ -235,8 +247,10 @@ Leading underscores can be used to work around special function names being ille
 
         var assets = GetAssets(assetInputDir).ToList();
         Progress? progress = null;
-        if (showProgress) {
-            progress = new Progress {
+        if (showProgress)
+        {
+            progress = new Progress
+            {
                 Bar = new ProgressBar(assets.Count()),
                 StdOut = Console.Out,
                 StdError = Console.Error,
@@ -249,15 +263,18 @@ Leading underscores can be used to work around special function names being ille
         var usmap = mappings != null ? new Usmap(mappings) : null;
 
         var i = 0;
-        foreach (var assetPath in assets) {
-            if (progress is Progress p2) {
+        foreach (var assetPath in assets)
+        {
+            if (progress is Progress p2)
+            {
                 Console.SetOut(p2.StdOut);
                 p2.Bar.Refresh(i++, $"Hierarchy... ({Path.GetFileName(assetPath)})");
                 Console.SetOut(p2.NullOut);
             }
             var asset = new UAsset(assetPath, ueVersion, usmap);
             var classExport = asset.GetClassExport();
-            if (classExport != null) {
+            if (classExport != null)
+            {
                 var parent = classExport.SuperStruct.ToImport(asset);
 
                 var assetPackage = Path.Join("/Game", Path.GetRelativePath(Path.Join(assetInputDir, projectName, "Content"), Path.GetDirectoryName(assetPath)!), Path.GetFileNameWithoutExtension(assetPath));
@@ -283,8 +300,10 @@ Leading underscores can be used to work around special function names being ille
         WriteDotViewer(hierarchy.ToString(), hierarchyPath, dotPath);
 
         i = 0;
-        Parallel.ForEach(assets, assetPath => {
-            if (progress is Progress p2) {
+        Parallel.ForEach(assets, assetPath =>
+        {
+            if (progress is Progress p2)
+            {
                 Console.SetOut(p2.StdOut);
                 p2.Bar.Refresh(i++, $"CFGs... ({Path.GetFileName(assetPath)})");
                 Console.SetOut(p2.NullOut);
@@ -296,19 +315,23 @@ Leading underscores can be used to work around special function names being ille
             UAsset asset = new UAsset(assetPath, ueVersion, usmap);
 
             var dot = new StringWriter();
-            if (new SummaryGenerator(asset, TextWriter.Null, dot).Summarize()) {
+            if (new SummaryGenerator(asset, TextWriter.Null, dot).Summarize())
+            {
                 WriteDotViewer(dot.ToString(), outputPath, dotPath);
             }
         });
-        if (progress is Progress p3) {
+        if (progress is Progress p3)
+        {
             Console.SetOut(p3.StdOut);
             Console.SetError(p3.StdError);
             Console.WriteLine(); // wipe progress bar
         }
         Console.WriteLine($"Finished generating CFGs for {assets.Count()} assets");
     }
-    static void GenJsonTree(EngineVersion ueVersion, string? mappings, string assetInputDir, string jsonOutputDir) {
-        foreach (var assetPath in GetAssets(assetInputDir)) {
+    static void GenJsonTree(EngineVersion ueVersion, string? mappings, string assetInputDir, string jsonOutputDir)
+    {
+        foreach (var assetPath in GetAssets(assetInputDir))
+        {
             var outputPath = Path.ChangeExtension(Path.Join(jsonOutputDir, Path.GetRelativePath(assetInputDir, assetPath)), ".json");
 
             var asset = LoadAsset(ueVersion, mappings, assetPath);
@@ -319,21 +342,26 @@ Leading underscores can be used to work around special function names being ille
             File.WriteAllText(outputPath, jsonSerializedAsset);
         }
     }
-    static void ToJson(EngineVersion ueVersion, string? mappings, string assetInput) {
+    static void ToJson(EngineVersion ueVersion, string? mappings, string assetInput)
+    {
         Console.WriteLine(LoadAsset(ueVersion, mappings, assetInput).SerializeJson(Newtonsoft.Json.Formatting.Indented));
     }
-    static void Read(EngineVersion ueVersion, string? mappings, string assetInput) {
+    static void Read(EngineVersion ueVersion, string? mappings, string assetInput)
+    {
         LoadAsset(ueVersion, mappings, assetInput);
         Console.WriteLine("complete");
     }
-    static void FromJson(EngineVersion ueVersion, string? mappings, string assetOutput) {
+    static void FromJson(EngineVersion ueVersion, string? mappings, string assetOutput)
+    {
         UAsset.DeserializeJson(Console.OpenStandardInput()).Write(assetOutput);
     }
-    static void CopyImports(EngineVersion ueVersion, string? mappings, string assetSource, string assetDestination, IList<int> imports) {
+    static void CopyImports(EngineVersion ueVersion, string? mappings, string assetSource, string assetDestination, IList<int> imports)
+    {
         UAsset from = LoadAsset(ueVersion, mappings, assetSource);
         UAsset to = LoadAsset(ueVersion, mappings, assetDestination);
 
-        foreach (var index in imports) {
+        foreach (var index in imports)
+        {
             var newIndex = Kismet.CopyImportTo((from, FPackageIndex.FromRawIndex(index)), to)!;
             var i = newIndex.ToImport(to);
             Console.WriteLine($"Copied import {index} => {newIndex}: {i.ClassName}, {i.ClassPackage}, {i.ObjectName}");
@@ -341,18 +369,24 @@ Leading underscores can be used to work around special function names being ille
 
         to.Write(assetDestination);
     }
-    static void MergeFunctions(EngineVersion ueVersion, string? mappings, string assetSource, string assetDestination, string assetMerged) {
+    static void MergeFunctions(EngineVersion ueVersion, string? mappings, string assetSource, string assetDestination, string assetMerged)
+    {
         UAsset source = LoadAsset(ueVersion, mappings, assetSource);
         UAsset dest = LoadAsset(ueVersion, mappings, assetDestination);
-        foreach (var export in source.Exports) {
-            if (export is FunctionExport fnSrc) {
-                if (export.ObjectName.ToString().StartsWith("ExecuteUbergraph")) {
+        foreach (var export in source.Exports)
+        {
+            if (export is FunctionExport fnSrc)
+            {
+                if (export.ObjectName.ToString().StartsWith("ExecuteUbergraph"))
+                {
                     Console.Error.WriteLine("Ignoring ubergraph");
                     continue;
                 }
                 var found = false;
-                foreach (var exportDest in dest.Exports) {
-                    if (exportDest is FunctionExport fnDest) {
+                foreach (var exportDest in dest.Exports)
+                {
+                    if (exportDest is FunctionExport fnDest)
+                    {
                         if (fnSrc.ObjectName.ToString().TrimStart('_') != fnDest.ObjectName.ToString().TrimStart('_')) continue;
                         Console.WriteLine($"Found matching function named {export.ObjectName}");
 
@@ -360,23 +394,29 @@ Leading underscores can be used to work around special function names being ille
                         //for (int i = 0; i < fnSrc.ScriptBytecode.Length; i++) {
                         var offset = 0;
                         var keepReturn = false;
-                        foreach (var inst in fnSrc.ScriptBytecode) {
-                            if (inst is EX_Context c) {
-                                if (c.ContextExpression is EX_LocalVirtualFunction i) {
-                                    if (i.VirtualFunctionName.Value.ToString() == "RETURN") {
+                        foreach (var inst in fnSrc.ScriptBytecode)
+                        {
+                            if (inst is EX_Context c)
+                            {
+                                if (c.ContextExpression is EX_LocalVirtualFunction i)
+                                {
+                                    if (i.VirtualFunctionName.Value.ToString() == "RETURN")
+                                    {
                                         keepReturn = true;
                                         continue; // TODO handle offset addresses in source function because now we're skipping expressions
                                     }
                                 }
                             }
                             var isReturn = inst.GetType() == typeof(EX_Return);
-                            if (isReturn ? keepReturn : true) {
-                                offset += (int) inst.GetSize(source);
+                            if (isReturn ? keepReturn : true)
+                            {
+                                offset += (int)inst.GetSize(source);
                                 newInst.Add(Kismet.CopyExpressionTo(inst, source, dest, fnSrc, fnDest)!);
                             }
                             if (isReturn) break;
                         }
-                        foreach (var inst in fnDest.ScriptBytecode) {
+                        foreach (var inst in fnDest.ScriptBytecode)
+                        {
                             Kismet.ShiftAddressses(inst, offset);
                             newInst.Add(inst);
                         }
@@ -386,7 +426,8 @@ Leading underscores can be used to work around special function names being ille
                         break;
                     }
                 }
-                if (!found) {
+                if (!found)
+                {
                     Kismet.CopyExportTo((source, FPackageIndex.FromExport(source.Exports.IndexOf(export))), dest);
                 }
             }
@@ -395,7 +436,8 @@ Leading underscores can be used to work around special function names being ille
     }
 
     // https://stackoverflow.com/a/43232486
-    static void OpenUrl(string url) {
+    static void OpenUrl(string url)
+    {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             url = url.Replace("&", "^&");
