@@ -371,7 +371,7 @@ Leading underscores can be used to work around special function names being ille
                             }
                             var isReturn = inst.GetType() == typeof(EX_Return);
                             if (isReturn ? keepReturn : true) {
-                                offset += (int) Kismet.GetSize(source, inst);
+                                offset += (int) inst.GetSize(source);
                                 newInst.Add(Kismet.CopyExpressionTo(inst, source, dest, fnSrc, fnDest)!);
                             }
                             if (isReturn) break;
