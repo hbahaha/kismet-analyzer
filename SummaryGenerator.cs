@@ -1259,6 +1259,19 @@ public class SummaryGenerator
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
+            case EX_SetConst e:
+                {
+                    lines = new Lines(addr).Expr(e).Text(" ").Type(ToString(e.InnerProperty));
+                    index += 8;
+                    index += 4;
+                    foreach (var arg in e.Elements)
+                    {
+                        lines.Add(Stringify(arg, ref index, referencedAddresses));
+                    }
+                    index++;
+                    if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
+                    break;
+                }
             case EX_SkipOffsetConst e:
                 {
                     lines = new Lines(addr).Expr(e).Text(" ").Addr(e.Value);
