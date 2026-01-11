@@ -108,6 +108,7 @@ public class SummaryGenerator
         JumpTrue,
         JumpFalse,
         Push,
+        Pop,
         Latent,
         Function,
     }
@@ -560,10 +561,11 @@ public class SummaryGenerator
             var lastInstr = block.Instructions[^1];
             foreach (var reference in lastInstr.ReferencedAddresses)
             {
-                // Skip types already added above
+                // Skip types already added above, and skip Pop (indirect jump with no known target)
                 if (reference.Type != ReferenceType.Function &&
                     reference.Type != ReferenceType.Latent &&
-                    reference.Type != ReferenceType.Push)
+                    reference.Type != ReferenceType.Push &&
+                    reference.Type != ReferenceType.Pop)
                 {
                     block.Successors.Add(new BlockEdge(
                         reference.Address,
@@ -581,11 +583,13 @@ public class SummaryGenerator
         // Block terminates when control flow branches or has special flow
         // - JumpTrue/JumpFalse = conditional branch
         // - Push/Latent = special flow (latent actions, push execution flow)
+        // - Pop = indirect jump to previously pushed address
         // - No Normal reference = no fall-through (terminal instructions)
         return instr.ReferencedAddresses.Any(r =>
             r.Type == ReferenceType.JumpTrue ||
             r.Type == ReferenceType.JumpFalse ||
             r.Type == ReferenceType.Push ||
+            r.Type == ReferenceType.Pop ||
             r.Type == ReferenceType.Latent) ||
             !instr.ReferencedAddresses.Any(r => r.Type == ReferenceType.Normal);
     }
@@ -797,13 +801,15 @@ public class SummaryGenerator
             case EX_PopExecutionFlow e:
                 {
                     lines = new Lines(addr).Expr(e);
+                    referencedAddresses.Add(new Reference(uint.MaxValue, ReferenceType.Pop));
                     break;
                 }
             case EX_PopExecutionFlowIfNot e:
                 {
                     lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.BooleanExpression, ref index, referencedAddresses));
-                    if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
+                    if (top) referencedAddresses.Add(new Reference(uint.MaxValue, ReferenceType.Pop));
+                    if (top) referencedAddresses.Add(new Reference(index, ReferenceType.JumpTrue));
                     break;
                 }
             case EX_CallMath e:
