@@ -301,6 +301,7 @@ public class SummaryGenerator
                 if (blocks.Count > 0)
                 {
                     var functionEdge = new Edge(functionName, $"{functionName}__block_{blocks[0].StartAddress}");
+                    functionEdge.BCompass = "n";
                     Graph.Edges.Add(functionEdge);
                 }
 
@@ -370,6 +371,7 @@ public class SummaryGenerator
                         }
 
                         var edge = new Edge(nodeId, targetNodeId);
+                        edge.BCompass = "n";
                         switch (successor.Type)
                         {
                             case ReferenceType.Normal:
