@@ -199,9 +199,9 @@ Leading underscores can be used to work around special function names being ille
         p.WaitForExit();
 
         var assembly = Assembly.GetAssembly(typeof(Program))!;
-        var resourceName = $"{assembly.GetName().Name!.Replace("-", "_")}.viz.embed.html";
+        var resourceName = $"{assembly.GetName().Name!.Replace("-", "_")}.svg_viewer.index.html";
         var template = new StreamReader(assembly.GetManifestResourceStream(resourceName)!).ReadToEnd();
-        var html = template.Replace("[DATA]", Convert.ToBase64String(Encoding.UTF8.GetBytes(svgData)));
+        var html = template.Replace("<!-- SVG_CONTENT -->", svgData);
 
         using (StreamWriter writetext = new StreamWriter(outputPath))
         {

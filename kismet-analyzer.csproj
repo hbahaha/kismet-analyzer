@@ -13,7 +13,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="UAssetAPI\**" />
-    <Compile Remove="viz\**" />
+    <Compile Remove="svg-viewer\**" />
     <Content Include="UAssetAPI\**" />
   </ItemGroup>
   <Target Name="SetSourceRevisionId" BeforeTargets="InitializeSourceControlInformation">
@@ -22,7 +22,7 @@
     </Exec>
   </Target>
   <ItemGroup>
-    <EmbeddedResource Include="viz\**" />
+    <EmbeddedResource Include="svg-viewer\index.html" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Goblinfactory.Konsole" Version="6.2.2" />

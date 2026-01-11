@@ -1,3 +1,6 @@
 [submodule "UAssetAPI"]
 	path = UAssetAPI
 	url = https://github.com/atenfyr/UAssetAPI.git
+[submodule "svg-viewer"]
+	path = svg-viewer
+	url = https://github.com/trumank/svg-viewer.git
