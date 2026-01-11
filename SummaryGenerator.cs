@@ -151,6 +151,7 @@ public class SummaryGenerator
     TextWriter Output;
     TextWriter DotOutput;
     Graph Graph;
+    FunctionExport? CurrentFunction;
 
     public SummaryGenerator(UAsset asset, TextWriter output, TextWriter dotOutput)
     {
@@ -214,6 +215,7 @@ public class SummaryGenerator
         {
             if (export is FunctionExport e)
             {
+                CurrentFunction = e;
                 string functionName = e.ObjectName.ToString();
                 var instructions = new List<Instruction>();
                 uint index = 0;
@@ -1427,7 +1429,26 @@ public class SummaryGenerator
         }
         else if (index.IsExport())
         {
-            return $"export {getChain(index.ToExport(Asset).OuterIndex)}{index.ToExport(Asset).ObjectName}";
+            var exp = index.ToExport(Asset);
+            // Shorten variable names that belong to the current function or class
+            if (CurrentFunction != null)
+            {
+                var functionIndex = Asset.Exports.IndexOf(CurrentFunction) + 1;
+                if (exp.OuterIndex.Index == functionIndex)
+                {
+                    return exp.ObjectName.ToString();
+                }
+            }
+            var classExport = Asset.GetClassExport();
+            if (classExport != null)
+            {
+                var classIndex = Asset.Exports.IndexOf(classExport) + 1;
+                if (exp.OuterIndex.Index == classIndex)
+                {
+                    return exp.ObjectName.ToString();
+                }
+            }
+            return $"export {getChain(exp.OuterIndex)}{exp.ObjectName}";
         }
         else if (index.IsImport())
         {
