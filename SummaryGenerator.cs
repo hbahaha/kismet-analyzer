@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using UAssetAPI;
 using UAssetAPI.UnrealTypes;
 using UAssetAPI.ExportTypes;
+using UAssetAPI.FieldTypes;
 using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.Kismet.Bytecode.Expressions;
 
@@ -175,14 +176,14 @@ public class SummaryGenerator
             classLines.Add(new Lines($"SuperStruct: {ToString(classExport.SuperStruct)}"));
             var propLines = new Lines("Properties:");
 
-            foreach (var prop in classExport.LoadedProperties)
+            foreach (var (propType, propName, propFlags) in GetProperties(classExport))
             {
-                var lines = new Lines($"{prop.SerializedType.ToString()} {prop.Name.ToString()}");
+                var lines = new Lines($"{propType} {propName}");
 
                 var flags = new List<string>();
                 foreach (EPropertyFlags flag in Enum.GetValues(typeof(EPropertyFlags)))
                 {
-                    if (flag != EPropertyFlags.CPF_None && prop.PropertyFlags.HasFlag(flag))
+                    if (flag != EPropertyFlags.CPF_None && propFlags.HasFlag(flag))
                     {
                         flags.Add(flag.ToString());
                     }
@@ -254,17 +255,17 @@ public class SummaryGenerator
                 string functionName = e.ObjectName.ToString();
 
                 var functionLines = new Lines("Function " + functionName);
-                foreach (var prop in e.LoadedProperties)
+                foreach (var (propType, propName, propFlags) in GetProperties(e))
                 {
                     var flags = new List<string>();
                     foreach (EPropertyFlags flag in Enum.GetValues(typeof(EPropertyFlags)))
                     {
-                        if (flag != EPropertyFlags.CPF_None && prop.PropertyFlags.HasFlag(flag))
+                        if (flag != EPropertyFlags.CPF_None && propFlags.HasFlag(flag))
                         {
                             flags.Add(flag.ToString());
                         }
                     }
-                    var propLines = new Lines($"{prop.SerializedType.ToString()} {prop.Name.ToString()}");
+                    var propLines = new Lines($"{propType} {propName}");
                     if (flags.Count > 0) propLines.Add(new Lines(String.Join("|", flags)));
                     functionLines.Add(propLines);
                 }
@@ -1437,5 +1438,33 @@ public class SummaryGenerator
     static string ToString(FName[] arr)
     {
         return "[" + String.Join(",", (object[])arr) + "]";
+    }
+
+    IEnumerable<(string Type, string Name, EPropertyFlags Flags)> GetProperties(StructExport structExport)
+    {
+        // New format (UE 4.25+): properties are in LoadedProperties as FProperty
+        if (structExport.LoadedProperties.Length > 0)
+        {
+            foreach (var prop in structExport.LoadedProperties)
+            {
+                yield return (prop.SerializedType.ToString(), prop.Name.ToString(), prop.PropertyFlags);
+            }
+        }
+        // Old format (pre-4.25): properties are UObjects in Children
+        else if (structExport.Children != null)
+        {
+            foreach (var childIndex in structExport.Children)
+            {
+                if (childIndex.IsExport())
+                {
+                    var childExport = childIndex.ToExport(Asset);
+                    if (childExport is PropertyExport propExport)
+                    {
+                        var typeName = childExport.GetExportClassType().ToString().Replace("Property", "");
+                        yield return (typeName, childExport.ObjectName.ToString(), propExport.Property.PropertyFlags);
+                    }
+                }
+            }
+        }
     }
 }
