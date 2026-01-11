@@ -106,6 +106,7 @@ public class Node : IStatement
 {
     public string Id { get; set; }
     public Attributes Attributes { get; } = new Attributes();
+    public IHtmlElement? HtmlLabel { get; set; }
 
     public Node(string id)
     {
@@ -114,10 +115,23 @@ public class Node : IStatement
     public void Write(TextWriter writer)
     {
         writer.Write(AbstractGraph.EscapeId(Id));
-        if (Attributes.Count > 0)
+        if (HtmlLabel != null || Attributes.Count > 0)
         {
-            writer.Write(" ");
-            Attributes.Write(writer);
+            writer.Write(" [");
+            var parts = new List<string>();
+
+            if (HtmlLabel != null)
+            {
+                var sw = new StringWriter();
+                sw.Write("<");
+                HtmlLabel.Write(sw);
+                sw.Write(">");
+                parts.Add($"label = {sw}");
+            }
+
+            parts.AddRange(Attributes.Select(attr => $"{attr.Key} = \"{attr.Value}\""));
+            writer.Write(string.Join("; ", parts));
+            writer.WriteLine("]");
         }
         else
         {
@@ -159,4 +173,83 @@ public class Edge : IStatement
             writer.WriteLine();
         }
     }
+}
+
+// HTML-like label support for GraphViz
+
+public interface IHtmlElement
+{
+    void Write(TextWriter writer);
+}
+
+public class HtmlText : IHtmlElement
+{
+    public string Value { get; }
+    public HtmlText(string value) => Value = value;
+
+    public void Write(TextWriter writer)
+    {
+        writer.Write(Value
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;")
+            .Replace("\"", "&quot;"));
+    }
+}
+
+public class HtmlRaw : IHtmlElement
+{
+    public string Value { get; }
+    public HtmlRaw(string value) => Value = value;
+    public void Write(TextWriter writer) => writer.Write(Value);
+}
+
+public class HtmlElement : IHtmlElement
+{
+    public string Tag { get; }
+    public Dictionary<string, string> Attributes { get; } = new();
+    public List<IHtmlElement> Children { get; } = new();
+    public bool SelfClosing { get; set; }
+
+    public HtmlElement(string tag) => Tag = tag;
+
+    public HtmlElement Attr(string key, string value) { Attributes[key] = value; return this; }
+    public HtmlElement Add(IHtmlElement child) { Children.Add(child); return this; }
+    public HtmlElement Add(string text) { Children.Add(new HtmlText(text)); return this; }
+
+    public void Write(TextWriter writer)
+    {
+        writer.Write($"<{Tag}");
+        foreach (var attr in Attributes)
+            writer.Write($" {attr.Key}=\"{attr.Value}\"");
+
+        if (SelfClosing)
+        {
+            writer.Write("/>");
+        }
+        else
+        {
+            writer.Write(">");
+            foreach (var child in Children)
+                child.Write(writer);
+            writer.Write($"</{Tag}>");
+        }
+    }
+}
+
+public static class Html
+{
+    public static HtmlElement Table(string? bgcolor = null)
+    {
+        var table = new HtmlElement("TABLE")
+            .Attr("BORDER", "0").Attr("CELLBORDER", "1").Attr("CELLSPACING", "0");
+        if (bgcolor != null) table.Attr("BGCOLOR", bgcolor);
+        return table;
+    }
+    public static HtmlElement Tr() => new("TR");
+    public static HtmlElement Td() => new("TD");
+    public static HtmlElement Font(string color) => new HtmlElement("FONT").Attr("COLOR", color);
+    public static HtmlElement Br() => new HtmlElement("BR") { SelfClosing = true };
+    public static HtmlText Text(string value) => new(value);
+    public static HtmlRaw Raw(string value) => new(value);
 }

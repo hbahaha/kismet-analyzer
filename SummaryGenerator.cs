@@ -9,27 +9,47 @@ using UAssetAPI.Kismet.Bytecode;
 using UAssetAPI.Kismet.Bytecode.Expressions;
 
 using Dot;
+using static Dot.Html;
 
 public class SummaryGenerator
 {
     public class Lines
     {
-        public string Label { get; }
+        public List<Element> Elements { get; }
         public int Address { get; }
         public List<Lines> Children { get; }
 
-        public Lines(string label)
+
+        public Lines(int address = -1)
         {
-            Label = label;
-            Address = -1;
+            Elements = new List<Element>();
+            Address = address;
             Children = new List<Lines>();
+            if (address >= 0)
+            {
+                Elements.Add(new Element(ElementKind.Address, $"{address}: "));
+            }
         }
-        public Lines(string label, uint address)
+
+        public Lines(string label) : this(-1)
         {
-            Label = label;
-            Address = (int)address;
-            Children = new List<Lines>();
+            Elements.Add(new Element(ElementKind.PlainText, label));
         }
+
+
+        // Fluent builders for semantic elements
+        public Lines Expr(KismetExpression expr) { Elements.Add(new Element(ElementKind.ExpressionType, "EX_" + expr.Inst)); return this; }
+        public Lines Addr(uint addr) { Elements.Add(new Element(ElementKind.Address, addr.ToString())); return this; }
+        public Lines Addr(int addr) { Elements.Add(new Element(ElementKind.Address, addr.ToString())); return this; }
+        public Lines Var(string name) { Elements.Add(new Element(ElementKind.Variable, name)); return this; }
+        public Lines Func(string name) { Elements.Add(new Element(ElementKind.Function, name)); return this; }
+        public Lines Str(string value) { Elements.Add(new Element(ElementKind.StringLiteral, value)); return this; }
+        public Lines Num(string value) { Elements.Add(new Element(ElementKind.NumericLiteral, value)); return this; }
+        public Lines Num<T>(T value) where T : struct { Elements.Add(new Element(ElementKind.NumericLiteral, value.ToString()!)); return this; }
+        public Lines Type(string name) { Elements.Add(new Element(ElementKind.TypeName, name)); return this; }
+        public Lines Kw(string keyword) { Elements.Add(new Element(ElementKind.Keyword, keyword)); return this; }
+        public Lines Text(string text) { Elements.Add(new Element(ElementKind.PlainText, text)); return this; }
+
         public Lines Add(Lines line)
         {
             Children.Add(line);
@@ -40,24 +60,16 @@ public class SummaryGenerator
             Children.Add(new Lines(line));
             return this;
         }
-        public string ToString(int indent = 0)
+
+        // Returns elements for rendering
+        public IEnumerable<(int Address, int Nest, List<Element> Elements)> GetElements()
         {
-            var output = new StringWriter();
-            output.WriteLine("".PadLeft(indent * 4) + Label);
+            yield return (Address, 0, Elements);
             foreach (var child in Children)
             {
-                output.Write(child.ToString(indent + 1));
-            }
-            return output.ToString();
-        }
-        public IEnumerable<(int, int, string)> GetLines()
-        {
-            yield return (Address, 0, Label);
-            foreach (var child in Children)
-            {
-                foreach (var (address, nest, line) in child.GetLines())
+                foreach (var (address, nest, elements) in child.GetElements())
                 {
-                    yield return (address, nest + 1, line);
+                    yield return (address, nest + 1, elements);
                 }
             }
         }
@@ -95,7 +107,7 @@ public class SummaryGenerator
         JumpTrue,
         JumpFalse,
         Push,
-        Skip,
+        Latent,
         Function,
     }
 
@@ -175,16 +187,16 @@ public class SummaryGenerator
                         flags.Add(flag.ToString());
                     }
                 }
-                if (flags.Count > 0) lines.Add(new Lines(String.Join("\\|", flags)));
+                if (flags.Count > 0) lines.Add(new Lines(String.Join("|", flags)));
                 propLines.Add(lines);
             }
             classLines.Add(propLines);
 
             var classNode = new Node(classExport.ObjectName.ToString());
-            classNode.Attributes["label"] = $"{{{LinesToField(classLines)}}}";
-            classNode.Attributes["shape"] = "record";
-            classNode.Attributes["style"] = "filled";
-            classNode.Attributes["fillcolor"] = "#88ff88";
+            var classCell = Td().Attr("ALIGN", "LEFT").Attr("BALIGN", "LEFT");
+            DotHtmlLabelRenderer.RenderTo(classCell, classLines);
+            classNode.HtmlLabel = Table("#88ff88").Add(Tr().Add(classCell));
+            classNode.Attributes["shape"] = "none";
             Graph.Nodes.Add(classNode);
         }
         else
@@ -253,15 +265,15 @@ public class SummaryGenerator
                         }
                     }
                     var propLines = new Lines($"{prop.SerializedType.ToString()} {prop.Name.ToString()}");
-                    if (flags.Count > 0) propLines.Add(new Lines(String.Join("\\|", flags)));
+                    if (flags.Count > 0) propLines.Add(new Lines(String.Join("|", flags)));
                     functionLines.Add(propLines);
                 }
 
                 var functionNode = new Node(functionName);
-                functionNode.Attributes["label"] = $"{{{LinesToField(functionLines)}}}";
-                functionNode.Attributes["shape"] = "record";
-                functionNode.Attributes["style"] = "filled";
-                functionNode.Attributes["fillcolor"] = "#ff8888";
+                var functionCell = Td().Attr("ALIGN", "LEFT").Attr("BALIGN", "LEFT");
+                DotHtmlLabelRenderer.RenderTo(functionCell, functionLines);
+                functionNode.HtmlLabel = Table("#ff8888").Add(Tr().Add(functionCell));
+                functionNode.Attributes["shape"] = "none";
                 Graph.Nodes.Add(functionNode);
 
                 var instructions = allFunctionInstructions[functionName];
@@ -293,7 +305,8 @@ public class SummaryGenerator
                 {
                     // Skip blocks that only contain EX_EndOfScript
                     if (block.Instructions.Count == 1 &&
-                        block.Instructions[0].Content.Label == "EX_EndOfScript")
+                        block.Instructions[0].Content.Elements.Any(e =>
+                            e.Kind == ElementKind.ExpressionType && e.Value == "EX_EndOfScript"))
                     {
                         continue;
                     }
@@ -303,38 +316,22 @@ public class SummaryGenerator
                     Output.WriteLine($"    Successors: {FormatSuccessors(block.Successors)}");
                     Output.WriteLine();
 
-                    foreach (var instr in block.Instructions)
-                    {
-                        foreach (var (address, nest, line) in instr.Content.GetLines())
-                        {
-                            var prefix = address >= 0 ? (address + ": ").PadRight(6) : "".PadRight(6);
-                            Output.WriteLine(prefix + "".PadRight(nest * 4) + line);
-                        }
-                    }
+                    PlainTextRenderer.RenderTo(Output, block.Instructions.Select(i => i.Content));
                     Output.WriteLine();
 
                     // DOT output: one node per block
                     var nodeId = $"{functionName}__block_{block.StartAddress}";
                     var node = new Node(nodeId);
 
-                    // Build label with all instructions in the block
-                    var labelContent = new StringWriter();
-                    foreach (var instr in block.Instructions)
-                    {
-                        foreach (var (address, nest, line) in instr.Content.GetLines())
-                        {
-                            var prefix = address >= 0 ? (address + ": ").PadRight(6) : "".PadRight(6);
-                            labelContent.Write(prefix);
-                            labelContent.Write(string.Concat(Enumerable.Repeat("&#160;&#160;", nest)));
-                            labelContent.Write(SanitizeLabel(line));
-                            labelContent.Write("\\l");
-                        }
-                    }
+                    // Build label with header and content cells
+                    var headerCell = Td().Add($"{classExport.ObjectName}::{functionName} @ {block.StartAddress}");
+                    var contentCell = Td().Attr("ALIGN", "LEFT").Attr("BALIGN", "LEFT");
+                    DotHtmlLabelRenderer.RenderTo(contentCell, block.Instructions.Select(i => i.Content));
 
-                    node.Attributes["label"] = $"{{{classExport.ObjectName}::{functionName} @ {block.StartAddress} | {labelContent}}}";
-                    node.Attributes["shape"] = "record";
-                    node.Attributes["style"] = "filled";
-                    node.Attributes["fillcolor"] = "#eeeeee";
+                    node.HtmlLabel = Table("#eeeeee")
+                        .Add(Tr().Add(headerCell))
+                        .Add(Tr().Add(contentCell));
+                    node.Attributes["shape"] = "none";
                     Graph.Nodes.Add(node);
 
                     // Create edges based on block successors
@@ -393,7 +390,7 @@ public class SummaryGenerator
                                 edge.Attributes["arrowhead"] = "onormal";
                                 edge.ACompass = "e";
                                 break;
-                            case ReferenceType.Skip:
+                            case ReferenceType.Latent:
                                 edge.Attributes["color"] = "orange";
                                 edge.Attributes["style"] = "dashed";
                                 edge.Attributes["arrowhead"] = "onormal";
@@ -417,26 +414,6 @@ public class SummaryGenerator
         return anyExport;
     }
 
-    public static string SanitizeLabel(string str)
-    {
-        return str
-            .Replace("{", "\\{")
-            .Replace("}", "\\}")
-            .Replace(">", "&gt;")
-            .Replace("<", "&lt;")
-            .Replace("\"", "\\\"");
-    }
-
-    public static string LinesToField(Lines lines)
-    {
-        var label = new StringWriter();
-        foreach (var (address, nest, line) in lines.GetLines())
-        {
-            label.Write(string.Concat(Enumerable.Repeat("&#160;&#160;", nest)) + SanitizeLabel(line) + "\\l");
-        }
-        return label.ToString();
-    }
-
     static HashSet<uint> IdentifyBlockLeaders(List<Instruction> instructions, string functionName)
     {
         var leaders = new HashSet<uint>();
@@ -458,7 +435,7 @@ public class SummaryGenerator
                     continue;
 
                 if (reference.FunctionName == null ||
-                    (reference.Type == ReferenceType.Skip && reference.FunctionName == functionName))
+                    (reference.Type == ReferenceType.Latent && reference.FunctionName == functionName))
                 {
                     var addr = reference.Address;
                     targetCounts[addr] = targetCounts.GetValueOrDefault(addr, 0) + 1;
@@ -468,7 +445,7 @@ public class SummaryGenerator
                     if (reference.Type == ReferenceType.JumpTrue ||
                         reference.Type == ReferenceType.JumpFalse ||
                         reference.Type == ReferenceType.Push ||
-                        reference.Type == ReferenceType.Skip)
+                        reference.Type == ReferenceType.Latent)
                     {
                         leaders.Add(addr);
                     }
@@ -567,7 +544,7 @@ public class SummaryGenerator
                 foreach (var reference in instr.ReferencedAddresses)
                 {
                     if (reference.Type == ReferenceType.Function ||
-                        reference.Type == ReferenceType.Skip ||
+                        reference.Type == ReferenceType.Latent ||
                         reference.Type == ReferenceType.Push)
                     {
                         block.Successors.Add(new BlockEdge(
@@ -584,7 +561,7 @@ public class SummaryGenerator
             {
                 // Skip types already added above
                 if (reference.Type != ReferenceType.Function &&
-                    reference.Type != ReferenceType.Skip &&
+                    reference.Type != ReferenceType.Latent &&
                     reference.Type != ReferenceType.Push)
                 {
                     block.Successors.Add(new BlockEdge(
@@ -602,13 +579,13 @@ public class SummaryGenerator
     {
         // Block terminates when control flow branches or has special flow
         // - JumpTrue/JumpFalse = conditional branch
-        // - Push/Skip = special flow (latent actions, push execution flow)
+        // - Push/Latent = special flow (latent actions, push execution flow)
         // - No Normal reference = no fall-through (terminal instructions)
         return instr.ReferencedAddresses.Any(r =>
             r.Type == ReferenceType.JumpTrue ||
             r.Type == ReferenceType.JumpFalse ||
             r.Type == ReferenceType.Push ||
-            r.Type == ReferenceType.Skip) ||
+            r.Type == ReferenceType.Latent) ||
             !instr.ReferencedAddresses.Any(r => r.Type == ReferenceType.Normal);
     }
 
@@ -637,14 +614,14 @@ public class SummaryGenerator
 
     Lines Stringify(KismetExpression exp, ref uint index, List<Reference> referencedAddresses, bool top = false)
     {
-        var exprAddress = index;
+        int addr = (int)index;
         index++;
         Lines lines;
         switch (exp)
         {
             case EX_PushExecutionFlow e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.PushingAddress, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Addr(e.PushingAddress);
                     referencedAddresses.Add(new Reference(e.PushingAddress, ReferenceType.Push));
                     index += 4;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -652,14 +629,14 @@ public class SummaryGenerator
                 }
             case EX_ComputedJump e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.CodeOffsetExpression, ref index, referencedAddresses));
                     // TODO how to map out where this jumps?
                     break;
                 }
             case EX_Jump e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.CodeOffset, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Addr(e.CodeOffset);
                     // Normal reference - single target, like fall-through but to non-sequential address
                     referencedAddresses.Add(new Reference(e.CodeOffset, ReferenceType.Normal));
                     index += 4;
@@ -667,7 +644,7 @@ public class SummaryGenerator
                 }
             case EX_JumpIfNot e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.CodeOffset, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Addr(e.CodeOffset);
                     referencedAddresses.Add(new Reference(e.CodeOffset, ReferenceType.JumpFalse));
                     index += 4;
                     lines.Add(Stringify(e.BooleanExpression, ref index, referencedAddresses));
@@ -676,35 +653,35 @@ public class SummaryGenerator
                 }
             case EX_LocalVariable e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.Variable), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Var(ToString(e.Variable));
                     index += 8;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_LocalOutVariable e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.Variable), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Var(ToString(e.Variable));
                     index += 8;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_DefaultVariable e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.Variable), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Var(ToString(e.Variable));
                     index += 8;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_InstanceVariable e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.Variable), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Var(ToString(e.Variable));
                     index += 8;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_ObjToInterfaceCast e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.ClassPtr), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Type(ToString(e.ClassPtr));
                     index += 8;
                     lines.Add(Stringify(e.Target, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -712,7 +689,7 @@ public class SummaryGenerator
                 }
             case EX_InterfaceToObjCast e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.ClassPtr), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Type(ToString(e.ClassPtr));
                     index += 8;
                     lines.Add(Stringify(e.Target, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -720,8 +697,7 @@ public class SummaryGenerator
                 }
             case EX_Let e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
-                    //PrintIndent(Output, indent + 1, "value = " + ToString(e.Value)); ?? same as variable
+                    lines = new Lines(addr).Expr(e);
                     index += 8;
                     lines.Add(Stringify(e.Variable, ref index, referencedAddresses));
                     lines.Add(Stringify(e.Expression, ref index, referencedAddresses));
@@ -730,7 +706,7 @@ public class SummaryGenerator
                 }
             case EX_LetObj e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.VariableExpression, ref index, referencedAddresses));
                     lines.Add(Stringify(e.AssignmentExpression, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -738,7 +714,7 @@ public class SummaryGenerator
                 }
             case EX_LetDelegate e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.VariableExpression, ref index, referencedAddresses));
                     lines.Add(Stringify(e.AssignmentExpression, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -746,7 +722,7 @@ public class SummaryGenerator
                 }
             case EX_LetBool e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.VariableExpression, ref index, referencedAddresses));
                     lines.Add(Stringify(e.AssignmentExpression, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -754,7 +730,7 @@ public class SummaryGenerator
                 }
             case EX_LetWeakObjPtr e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.VariableExpression, ref index, referencedAddresses));
                     lines.Add(Stringify(e.AssignmentExpression, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -762,7 +738,7 @@ public class SummaryGenerator
                 }
             case EX_LetValueOnPersistentFrame e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.DestinationProperty), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Var(ToString(e.DestinationProperty));
                     index += 8;
                     lines.Add(Stringify(e.AssignmentExpression, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -770,7 +746,7 @@ public class SummaryGenerator
                 }
             case EX_StructMemberContext e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.StructMemberExpression), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Var(ToString(e.StructMemberExpression));
                     index += 8;
                     lines.Add(Stringify(e.StructExpression, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -778,7 +754,7 @@ public class SummaryGenerator
                 }
             case EX_MetaCast e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.ClassPtr), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Type(ToString(e.ClassPtr));
                     index += 8;
                     lines.Add(Stringify(e.Target, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -786,7 +762,7 @@ public class SummaryGenerator
                 }
             case EX_DynamicCast e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.ClassPtr), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Type(ToString(e.ClassPtr));
                     index += 8;
                     lines.Add(Stringify(e.Target, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -794,7 +770,7 @@ public class SummaryGenerator
                 }
             case EX_PrimitiveCast e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.ConversionType, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Type(e.ConversionType.ToString());
                     index++;
                     switch (e.ConversionType)
                     {
@@ -819,19 +795,19 @@ public class SummaryGenerator
                 }
             case EX_PopExecutionFlow e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     break;
                 }
             case EX_PopExecutionFlowIfNot e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.BooleanExpression, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_CallMath e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.StackNode), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Func(ToString(e.StackNode));
                     index += 8;
                     foreach (var arg in e.Parameters)
                     {
@@ -843,7 +819,7 @@ public class SummaryGenerator
                 }
             case EX_SwitchValue e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     index += 6;
                     lines.Add(Stringify(e.IndexTerm, ref index, referencedAddresses));
                     // lines.Add("OffsetToSwitchEnd = " + e.EndGotoOffset);
@@ -851,14 +827,14 @@ public class SummaryGenerator
                     foreach (var c in e.Cases)
                     {
                         ci++;
-                        var nested = new Lines("case " + ci + ":", exprAddress);
+                        var nested = new Lines((int)addr).Kw("case").Text(" ").Num(ci).Text(":");
                         nested.Add(Stringify(c.CaseIndexValueTerm, ref index, referencedAddresses));
                         index += 4;
                         // nested.Add("NextCaseOffset = " + c.NextOffset);
                         nested.Add(Stringify(c.CaseTerm, ref index, referencedAddresses));
                         lines.Add(nested);
                     }
-                    var defaultCase = new Lines("default:", exprAddress);
+                    var defaultCase = new Lines((int)addr).Kw("default").Text(":");
                     defaultCase.Add(Stringify(e.DefaultTerm, ref index, referencedAddresses));
                     lines.Add(defaultCase);
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -866,13 +842,13 @@ public class SummaryGenerator
                 }
             case EX_Self e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_TextConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     index++;
                     switch (e.Value.TextLiteralType)
                     {
@@ -882,26 +858,26 @@ public class SummaryGenerator
                             }
                         case EBlueprintTextLiteralType.LocalizedText:
                             {
-                                lines.Add(new Lines("SourceString = " + ReadString(e.Value.LocalizedSource, ref index)));
-                                lines.Add(new Lines("LocalizedKey = " + ReadString(e.Value.LocalizedKey, ref index)));
-                                lines.Add(new Lines("LocalizedNamespace = " + ReadString(e.Value.LocalizedNamespace, ref index)));
+                                lines.Add(new Lines().Kw("SourceString").Text(" = ").Str(ReadString(e.Value.LocalizedSource, ref index)));
+                                lines.Add(new Lines().Kw("LocalizedKey").Text(" = ").Str(ReadString(e.Value.LocalizedKey, ref index)));
+                                lines.Add(new Lines().Kw("LocalizedNamespace").Text(" = ").Str(ReadString(e.Value.LocalizedNamespace, ref index)));
                                 break;
                             }
                         case EBlueprintTextLiteralType.InvariantText:
                             {
-                                lines.Add(new Lines("SourceString = " + ReadString(e.Value.InvariantLiteralString, ref index)));
+                                lines.Add(new Lines().Kw("SourceString").Text(" = ").Str(ReadString(e.Value.InvariantLiteralString, ref index)));
                                 break;
                             }
                         case EBlueprintTextLiteralType.LiteralString:
                             {
-                                lines.Add(new Lines("SourceString = " + ReadString(e.Value.LiteralString, ref index)));
+                                lines.Add(new Lines().Kw("SourceString").Text(" = ").Str(ReadString(e.Value.LiteralString, ref index)));
                                 break;
                             }
                         case EBlueprintTextLiteralType.StringTableEntry:
                             {
                                 index += 8;
-                                lines.Add(new Lines("TableId = " + ReadString(e.Value.StringTableId, ref index)));
-                                lines.Add(new Lines("TableKey = " + ReadString(e.Value.StringTableKey, ref index)));
+                                lines.Add(new Lines().Kw("TableId").Text(" = ").Str(ReadString(e.Value.StringTableId, ref index)));
+                                lines.Add(new Lines().Kw("TableKey").Text(" = ").Str(ReadString(e.Value.StringTableKey, ref index)));
                                 break;
                             }
                     }
@@ -910,45 +886,43 @@ public class SummaryGenerator
                 }
             case EX_ObjectConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.Value), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Var(ToString(e.Value));
                     index += 8;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_VectorConst e:
                 {
-                    lines = new Lines(String.Format("EX_{0} {1},{2},{3}", e.Inst, e.Value.X, e.Value.Y, e.Value.Z), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Num($"{e.Value.X},{e.Value.Y},{e.Value.Z}");
                     index += Asset.ObjectVersionUE5 >= ObjectVersionUE5.LARGE_WORLD_COORDINATES ? 24U : 12U;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_Vector3fConst e:
                 {
-                    lines = new Lines(String.Format("EX_{0} {1},{2},{3}", e.Inst, e.X, e.Y, e.Z));
+                    lines = new Lines(addr).Expr(e).Text(" ").Num($"{e.X},{e.Y},{e.Z}");
                     index += 12;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_RotationConst e:
                 {
-                    lines = new Lines(String.Format("EX_{0} {1},{2},{3}", e.Inst, e.Value.Pitch, e.Value.Yaw, e.Value.Roll), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Num($"{e.Value.Pitch},{e.Value.Yaw},{e.Value.Roll}");
                     index += Asset.ObjectVersionUE5 >= ObjectVersionUE5.LARGE_WORLD_COORDINATES ? 24U : 12U;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_TransformConst e:
                 {
-                    lines = new Lines(String.Format("EX_{0} [Rot={1},{2},{3},{4}] [Pos={5},{6},{7}] [Scale={8},{9},{10}]",
-                                e.Inst, e.Value.Rotation.X, e.Value.Rotation.Y, e.Value.Rotation.Z, e.Value.Rotation.W,
-                                e.Value.Translation.X, e.Value.Translation.Y, e.Value.Translation.Z,
-                                e.Value.Scale3D.X, e.Value.Scale3D.Y, e.Value.Scale3D.Z), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ")
+                        .Num($"[Rot={e.Value.Rotation.X},{e.Value.Rotation.Y},{e.Value.Rotation.Z},{e.Value.Rotation.W}] [Pos={e.Value.Translation.X},{e.Value.Translation.Y},{e.Value.Translation.Z}] [Scale={e.Value.Scale3D.X},{e.Value.Scale3D.Y},{e.Value.Scale3D.Z}]");
                     index += Asset.ObjectVersionUE5 >= ObjectVersionUE5.LARGE_WORLD_COORDINATES ? 80U : 40U;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_Context e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.ObjectExpression, ref index, referencedAddresses));
                     index += 4;
                     //lines.Add("SkipOffsetForNull = " + e.Offset);
@@ -960,7 +934,7 @@ public class SummaryGenerator
                 }
             case EX_CallMulticastDelegate e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.StackNode), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Func(ToString(e.StackNode));
                     index += 8;
                     //lines.Add("IsSelfContext = " + (Asset.GetClassExport().OuterIndex.Index == e.StackNode.Index));
                     lines.Add(Stringify(e.Delegate, ref index, referencedAddresses));
@@ -974,7 +948,7 @@ public class SummaryGenerator
                 }
             case EX_LocalFinalFunction e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.StackNode), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Func(ToString(e.StackNode));
                     index += 8;
                     foreach (var arg in e.Parameters)
                     {
@@ -1003,7 +977,7 @@ public class SummaryGenerator
                 }
             case EX_FinalFunction e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.StackNode), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Func(ToString(e.StackNode));
                     index += 8;
                     foreach (var arg in e.Parameters)
                     {
@@ -1015,7 +989,7 @@ public class SummaryGenerator
                 }
             case EX_LocalVirtualFunction e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.VirtualFunctionName, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Func(e.VirtualFunctionName.ToString());
                     index += 12;
                     foreach (var arg in e.Parameters)
                     {
@@ -1027,7 +1001,7 @@ public class SummaryGenerator
                 }
             case EX_VirtualFunction e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.VirtualFunctionName, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Func(e.VirtualFunctionName.ToString());
                     index += 12;
                     foreach (var arg in e.Parameters)
                     {
@@ -1048,7 +1022,7 @@ public class SummaryGenerator
                 }
             case EX_AddMulticastDelegate e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.Delegate, ref index, referencedAddresses));
                     lines.Add(Stringify(e.DelegateToAdd, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -1056,7 +1030,7 @@ public class SummaryGenerator
                 }
             case EX_RemoveMulticastDelegate e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.Delegate, ref index, referencedAddresses));
                     lines.Add(Stringify(e.DelegateToAdd, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -1064,14 +1038,14 @@ public class SummaryGenerator
                 }
             case EX_ClearMulticastDelegate e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.DelegateToClear, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_BindDelegate e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.FunctionName, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Func(e.FunctionName.ToString());
                     index += 12;
                     lines.Add(Stringify(e.Delegate, ref index, referencedAddresses));
                     lines.Add(Stringify(e.ObjectTerm, ref index, referencedAddresses));
@@ -1080,7 +1054,7 @@ public class SummaryGenerator
                 }
             case EX_StructConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.Struct), exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Type(ToString(e.Struct));
                     index += 8;
                     index += 4;
                     foreach (var arg in e.Value)
@@ -1104,7 +1078,7 @@ public class SummaryGenerator
                                 {
                                     if (e.Value[3] is EX_Self self)
                                     {
-                                        referencedAddresses.Add(new Reference(skip.Value, ReferenceType.Skip, name.Value.ToString()));
+                                        referencedAddresses.Add(new Reference(skip.Value, ReferenceType.Latent, name.Value.ToString()));
                                     }
                                     else
                                     {
@@ -1129,7 +1103,7 @@ public class SummaryGenerator
                 }
             case EX_SetArray e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.AssigningProperty, ref index, referencedAddresses));
                     foreach (var arg in e.Elements)
                     {
@@ -1141,7 +1115,7 @@ public class SummaryGenerator
                 }
             case EX_SetSet e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.SetProperty, ref index, referencedAddresses));
                     index += 4;
                     foreach (var arg in e.Elements)
@@ -1154,14 +1128,14 @@ public class SummaryGenerator
                 }
             case EX_SetMap e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.MapProperty, ref index, referencedAddresses));
                     index += 4;
                     var ei = -1;
                     foreach (var pair in Pairs(e.Elements))
                     {
                         ei++;
-                        var entry = new Lines($"entry {ei}:", exprAddress);
+                        var entry = new Lines((int)addr).Kw("entry").Text(" ").Num(ei).Text(":");
                         lines.Add(Stringify(pair.Item1, ref index, referencedAddresses));
                         lines.Add(Stringify(pair.Item2, ref index, referencedAddresses));
                     }
@@ -1171,16 +1145,16 @@ public class SummaryGenerator
                 }
             case EX_MapConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     index += 8;
-                    lines.Add("KeyProperty: " + ToString(e.KeyProperty));
-                    lines.Add("ValueProperty: " + ToString(e.ValueProperty));
+                    lines.Add(new Lines().Kw("KeyProperty").Text(": ").Type(ToString(e.KeyProperty)));
+                    lines.Add(new Lines().Kw("ValueProperty").Text(": ").Type(ToString(e.ValueProperty)));
                     index += 4;
                     var ei = -1;
                     foreach (var pair in Pairs(e.Elements))
                     {
                         ei++;
-                        var entry = new Lines($"entry {ei}:");
+                        var entry = new Lines().Kw("entry").Text(" ").Num(ei).Text(":");
                         lines.Add(Stringify(pair.Item1, ref index, referencedAddresses));
                         lines.Add(Stringify(pair.Item2, ref index, referencedAddresses));
                     }
@@ -1189,93 +1163,93 @@ public class SummaryGenerator
                 }
             case EX_SoftObjectConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.Value, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_BitFieldConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + ToString(e.Property) + " " + e.Value);
+                    lines = new Lines(addr).Expr(e).Text(" ").Var(ToString(e.Property)).Text(" ").Num(e.Value);
                     index += 8 + 1;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_ByteConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Num(e.Value);
                     index++;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_IntConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Num(e.Value);
                     index += 4;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_NothingInt32 e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value);
+                    lines = new Lines(addr).Expr(e).Text(" ").Num(e.Value);
                     index += 4;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_Int64Const e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Num(e.Value);
                     index += 8;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_UInt64Const e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Num(e.Value);
                     index += 8;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_FloatConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Num(e.Value);
                     index += 4;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_DoubleConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Num(e.Value);
                     index += 8;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_NameConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Var(e.Value.ToString());
                     index += 12;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_StringConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Str(e.Value);
                     index += 1 + (uint)e.Value.Length;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_UnicodeStringConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Str(e.Value);
                     index += (uint)(e.Value.Length + 1) * 2;
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_ArrayConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     index += 8;
-                    lines.Add(ToString(e.InnerProperty));
+                    lines.Add(new Lines().Type(ToString(e.InnerProperty)));
                     index += 4;
                     foreach (var arg in e.Elements)
                     {
@@ -1287,7 +1261,7 @@ public class SummaryGenerator
                 }
             case EX_SkipOffsetConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value, exprAddress);
+                    lines = new Lines(addr).Expr(e).Text(" ").Addr(e.Value);
                     // handled in LatentActionInfo struct instead
                     // referencedAddresses.Add(new Reference(e.Value, ReferenceType.Skip));
                     index += 4;
@@ -1296,19 +1270,19 @@ public class SummaryGenerator
                 }
             case EX_Return e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.ReturnExpression, ref index, referencedAddresses));
                     break;
                 }
             case EX_InterfaceContext e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.InterfaceValue, ref index, referencedAddresses));
                     break;
                 }
             case EX_ArrayGetByRef e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.ArrayVariable, ref index, referencedAddresses));
                     lines.Add(Stringify(e.ArrayIndex, ref index, referencedAddresses));
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
@@ -1316,19 +1290,19 @@ public class SummaryGenerator
                 }
             case EX_Tracepoint e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_WireTracepoint e:
                 {
-                    lines = new Lines("EX_" + e.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(e);
                     if (top) referencedAddresses.Add(new Reference(index, ReferenceType.Normal));
                     break;
                 }
             case EX_FieldPathConst e:
                 {
-                    lines = new Lines("EX_" + e.Inst + " " + e.Value);
+                    lines = new Lines(addr).Expr(e);
                     lines.Add(Stringify(e.Value, ref index, referencedAddresses));
                     break;
                 }
@@ -1339,7 +1313,7 @@ public class SummaryGenerator
             case EX_NoInterface:
             case EX_EndOfScript:
                 {
-                    lines = new Lines("EX_" + exp.Inst, exprAddress);
+                    lines = new Lines(addr).Expr(exp);
                     break;
                 }
             default:
