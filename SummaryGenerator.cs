@@ -172,13 +172,13 @@ public class SummaryGenerator
         if (classExport != null)
         {
             anyExport = true;
-            var classLines = new Lines($"ClassExport: {classExport.ObjectName}");
-            classLines.Add(new Lines($"SuperStruct: {ToString(classExport.SuperStruct)}"));
-            var propLines = new Lines("Properties:");
+            var classLines = new Lines().Kw("ClassExport:").Text(" ").Type(classExport.ObjectName.ToString());
+            classLines.Add(new Lines().Kw("SuperStruct:").Text(" ").Type(ToString(classExport.SuperStruct)));
+            var propLines = new Lines().Kw("Properties:");
 
             foreach (var (propType, propName, propFlags) in GetProperties(classExport))
             {
-                var lines = new Lines($"{propType} {propName}");
+                var lines = new Lines().Type(propType).Text(" ").Var(propName);
 
                 var flags = new List<string>();
                 foreach (EPropertyFlags flag in Enum.GetValues(typeof(EPropertyFlags)))
@@ -188,7 +188,7 @@ public class SummaryGenerator
                         flags.Add(flag.ToString());
                     }
                 }
-                if (flags.Count > 0) lines.Add(new Lines(String.Join("|", flags)));
+                if (flags.Count > 0) lines.Add(new Lines().Kw(String.Join("|", flags)));
                 propLines.Add(lines);
             }
             classLines.Add(propLines);
@@ -196,7 +196,7 @@ public class SummaryGenerator
             var classNode = new Node(classExport.ObjectName.ToString());
             var classCell = Td().Attr("ALIGN", "LEFT").Attr("BALIGN", "LEFT");
             DotHtmlLabelRenderer.RenderTo(classCell, classLines);
-            classNode.HtmlLabel = Table("#88ff88").Add(Tr().Add(classCell));
+            classNode.HtmlLabel = Table("#d4ffd4").Add(Tr().Add(classCell));
             classNode.Attributes["shape"] = "none";
             Graph.Nodes.Add(classNode);
         }
@@ -254,7 +254,7 @@ public class SummaryGenerator
 
                 string functionName = e.ObjectName.ToString();
 
-                var functionLines = new Lines("Function " + functionName);
+                var functionLines = new Lines().Kw("Function").Text(" ").Func(functionName);
                 foreach (var (propType, propName, propFlags) in GetProperties(e))
                 {
                     var flags = new List<string>();
@@ -265,15 +265,15 @@ public class SummaryGenerator
                             flags.Add(flag.ToString());
                         }
                     }
-                    var propLines = new Lines($"{propType} {propName}");
-                    if (flags.Count > 0) propLines.Add(new Lines(String.Join("|", flags)));
+                    var propLines = new Lines().Type(propType).Text(" ").Var(propName);
+                    if (flags.Count > 0) propLines.Add(new Lines().Kw(String.Join("|", flags)));
                     functionLines.Add(propLines);
                 }
 
                 var functionNode = new Node(functionName);
                 var functionCell = Td().Attr("ALIGN", "LEFT").Attr("BALIGN", "LEFT");
                 DotHtmlLabelRenderer.RenderTo(functionCell, functionLines);
-                functionNode.HtmlLabel = Table("#ff8888").Add(Tr().Add(functionCell));
+                functionNode.HtmlLabel = Table("#ffd4d4").Add(Tr().Add(functionCell));
                 functionNode.Attributes["shape"] = "none";
                 Graph.Nodes.Add(functionNode);
 
