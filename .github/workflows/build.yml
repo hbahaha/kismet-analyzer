@@ -1,6 +1,17 @@
 name: dotnet package
 
 on:
+  # 1. Позволяет запускать сборку вручную кнопкой
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Выберите окружение для сборки'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
   push:
     branches:
       - master
